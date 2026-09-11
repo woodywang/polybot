@@ -4110,3 +4110,88 @@ bug: **state that belongs to the account was stored in the process.** Equity,
 peak, drawdown, and the halt flag are properties of the money, not of the
 program that happens to be managing it, and every one of them was being
 reconstructed from a command-line default on every launch.
+
+---
+
+## 76. The prediction was wrong, in the way it said it might be
+
+Section 70 pre-registered a prediction for the wide-spread front-of-queue maker.
+The result:
+
+```
+48 posts, 14 filled (29.2%)
+  improve 1 tick, min capture +0.005
+  size ahead at post   median 0 sh
+  capture at post      median +1.00c   mean +1.30c
+  markout   30s   n=14  mean -7.500c   median  -8.000c   t=-2.27
+  markout  120s   n=14  mean -9.357c   median -12.500c   t=-2.29
+```
+
+Against what was predicted:
+
+| | predicted | observed |
+|---|---|---|
+| 30s markout | ~0, within ±0.5c | **-7.50c** |
+| 120s markout | ~-0.8c (-60% of capture) | **-9.36c** |
+| milder than §57's -15c | yes | yes, but only by half |
+
+**Wrong on both numbers.** Section 70 also wrote down what being wrong would
+mean, which is the only reason this is informative rather than embarrassing:
+
+> If instead the 30s markout comes back at -5c or worse, then front-of-queue in
+> a wide book is selected as brutally as the back of the queue in a narrow one,
+> and the spread's apparent fairness at 30 seconds is an illusion created by
+> measuring unconditional travel.
+
+That is what happened.
+
+### The adverse-selection multiplier
+
+Section 68's equilibrium was real but was measuring the wrong quantity. The
+unconditional 30-second mid travel at these spreads is ~1.5c. **Conditional on
+having been filled it is 7.5c — five times larger.** Being filled is itself the
+information: somebody chose to sell to you, and they chose because the move was
+already coming.
+
+So the full accounting for the best maker configuration this project found:
+
+```
+capture at post          +1.30c
+adverse selection 30s    -7.50c
+                         ------
+                          -6.20c per fill
+```
+
+Queue priority worked exactly as designed — the fill rate went from 7.7% at the
+touch to **29.2%** one tick up, and the spread gate delivered the +1.0-1.3c it
+promised. Both halves of the mechanism did their job and the trade still loses
+six cents a share.
+
+### What this actually closes
+
+**Making is closed at every queue position and every spread**, which was the last
+route left:
+
+| configuration | capture | markout | net |
+|---|---|---|---|
+| at the touch, any spread (§57) | +1.0c | -15c | -14c |
+| one tick up, 1c spread (§63) | -0.5c | — | negative on entry |
+| one tick up, spread >= 3c (this) | +1.3c | -7.5c | **-6.2c** |
+
+### The caveat that is also the answer
+
+This simulation never cancels. It posts, fills, and holds to settlement — so it
+eats the entire post-fill move. A real market maker cancels and reprices
+continuously, and the -7.5c at 30 seconds is only paid by someone who cannot
+react inside 30 seconds.
+
+That reframes the whole maker question. **The spread does not compensate a maker
+for being filled; it compensates a maker for being fast.** Glosten-Milgrom says
+the spread prices adverse selection given the maker's information; what section
+68 measured is that the spread matches unconditional volatility, and what this
+section measures is that the conditional move is 5x that. The gap between them
+is precisely the value of being able to cancel — and it is about 6 cents a
+share, on a 60-cent contract, per fill.
+
+Which is a perfectly good description of why this instrument is unavailable to a
+$100 account run from a Python event loop that drops its own websocket.
