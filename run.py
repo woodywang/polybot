@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS obs(
   ts REAL, slug TEXT, kind TEXT, tau REAL, spot REAL, strike REAL, sigma REAL,
   fair_up REAL, naive_up REAL, side TEXT, ask REAL, depth REAL, edge REAL,
   fill_px REAL, fill_sz REAL, fee REAL, intens REAL, tps REAL,
-  isig REAL, band REAL, equity REAL);
+  isig REAL, band REAL, equity REAL, stale REAL);
 CREATE INDEX IF NOT EXISTS obs_slug ON obs(slug);
 CREATE TABLE IF NOT EXISTS pairs(
   ts REAL, slug TEXT, tau REAL, ask_up REAL, ask_dn REAL, cost REAL,
@@ -153,6 +153,9 @@ class State:
         self.markets, self.books = {}, {}
         self.db = sqlite3.connect(a.db)
         self.db.executescript(DDL)
+        # `obs` has gained columns three times; older files predate each one.
+        if "stale" not in {r[1] for r in self.db.execute("PRAGMA table_info(obs)")}:
+            self.db.execute("ALTER TABLE obs ADD COLUMN stale REAL")
         self.wanted, self.gen = set(), 0
         self.pos = {}                 # (slug, side) -> [shares, cost_incl_fee]
         self.lots = {}                # (slug, side) -> deque([shares, cost/share])
@@ -607,7 +610,8 @@ async def resolve(st):
 
 
 # --------------------------------------------------------------- trading
-def log(st, kind, slug, snap, side, ask, depth, ed, sz=None, fee=None):
+def log(st, kind, slug, snap, side, ask, depth, ed, sz=None, fee=None,
+        stale=None):
     # A maker pays no taker fee, so the fee is passed in rather than derived.
     # `0.0` and `None` mean different things here and `or` would conflate them.
     if fee is None:
@@ -616,14 +620,14 @@ def log(st, kind, slug, snap, side, ask, depth, ed, sz=None, fee=None):
     # positional INSERT drifts silently until it hits a live row.
     st.db.execute(
         "INSERT INTO obs(ts,slug,kind,tau,spot,strike,sigma,fair_up,naive_up,"
-        "side,ask,depth,edge,fill_px,fill_sz,fee,intens,tps,isig,band,equity)"
-        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "side,ask,depth,edge,fill_px,fill_sz,fee,intens,tps,isig,band,equity,"
+        "stale) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                   (time.time(), slug, kind, snap["tau"], snap["spot"],
                    snap["strike"], snap["sigma"], snap["fair_up"],
                    snap["naive_up"], side, ask, depth, ed,
                    ask if sz else None, sz, fee,
                    snap.get("intens"), snap.get("tps"),
-                   snap.get("isig"), snap.get("band"), st.equity))
+                   snap.get("isig"), snap.get("band"), st.equity, stale))
     if sz:
         st.committed += ask * sz + fee
         st.mkt_cost[slug] = st.mkt_cost.get(slug, 0.0) + ask * sz + fee
@@ -842,8 +846,20 @@ async def strategy(st):
                     continue
                 # Refuse a quote that has not moved recently: it is a stale
                 # snapshot, not a price anyone will fill.
-                if st.books[tok].stale_for(now) > st.cfg.max_stale:
+                # A quote nobody has touched is what --max-stale was built to
+                # refuse, on the grounds that a frozen book is not a tradeable
+                # price.  But the account this project started from pays
+                # $46,573 of TAKER fees and still clears 1.64c a share gross,
+                # and no calibrated quote offers that -- so stale quotes are
+                # the only candidate left.  Record the age and let the trading
+                # gate decide, rather than discard the observation unmeasured.
+                age = st.books[tok].stale_for(now)
+                if age > st.cfg.max_stale and not st.cfg.log_stale:
                     continue
+                # --log-stale only widens what is RECORDED.  Every path that
+                # spends money still checks `fresh`, so the guard that fixed
+                # six findings is not quietly removed to run this experiment.
+                fresh = age <= st.cfg.max_stale
 
                 # --- favourite-only (1) or underdog-only (-1).  Near the money
                 # both asks sit above 0.50 -- they sum to about $1.035 -- so a
@@ -855,7 +871,7 @@ async def strategy(st):
                         continue
 
                 if st.cfg.maker:
-                    if not a_up or not a_dn:
+                    if not fresh or not a_up or not a_dn:
                         continue          # no mid without both sides quoted
                     m_up = (a_up + (1.0 - a_dn)) / 2.0
                     maker_step(st, slug, side, tok, snap, now,
@@ -907,7 +923,7 @@ async def strategy(st):
                     plus = fair.edge(p, ask) > st.cfg.min_edge
                     want = {"cost": cheap, "edge": plus,
                             "both": cheap and plus}[st.cfg.lock_mode]
-                    if want:
+                    if want and fresh:
                         st.pending.add((slug, side))
                         asyncio.create_task(
                             fill(st, "lock", slug, side, tok, dict(snap), basis))
@@ -960,7 +976,7 @@ async def strategy(st):
                 #                 widen and the stale-quote edge is gone
                 room = st.cfg.max_per_market - st.held(slug, side)[1]
                 budget = st.equity - st.committed
-                if (ed > st.cfg.min_edge and ask <= st.cfg.max_price
+                if (fresh and ed > st.cfg.min_edge and ask <= st.cfg.max_price
                         and ask >= st.cfg.min_ask
                         and depth <= st.cfg.max_depth
                         and vrp_ok
@@ -980,7 +996,8 @@ async def strategy(st):
                 key = (slug, side)
                 if now - last.get(key, 0) > 20:
                     last[key] = now
-                    log(st, "sample", slug, snap, side, ask, depth, ed)
+                    log(st, "sample", slug, snap, side, ask, depth, ed,
+                        stale=age)
         st.db.commit()
         await asyncio.sleep(st.cfg.tick_ms / 1000.0)
 
@@ -1277,6 +1294,37 @@ def report(a):
                   f"{statistics.mean(v):>+12.4f}{statistics.mean(nt):>+10.4f}"
                   f"{tt:>+8.2f}")
 
+    # --- is a stale quote a mispricing or a mirage?
+    # The guard that refuses quotes nobody has touched fixed six findings, on
+    # the reasoning that a frozen book is not a price anyone will fill.  The
+    # account this project started from contradicts that: it pays $46,573 of
+    # taker fees -- so it crosses -- and still clears 1.64c a share gross,
+    # which no calibrated quote offers.  Stale quotes are the only candidate
+    # left.  Needs `--log-stale 1`; older databases have no rows here.
+    sq = {}
+    for slug, side, ask, age in db.execute(
+            "SELECT slug,side,ask,stale FROM obs WHERE kind='sample'"
+            " AND ask IS NOT NULL AND stale IS NOT NULL"):
+        if slug not in res:
+            continue
+        b = 0 if age < 5 else (1 if age < 20 else (2 if age < 60 else 3))
+        e = sq.setdefault(b, {}).setdefault(starts.get(slug, slug), [0, 0.0])
+        e[0] += 1
+        e[1] += (1.0 if res[slug] == side else 0.0) - ask - fair.taker_fee(ask)
+    if sq:
+        print("\ntaker net by how long the quote has sat untouched")
+        print(f"  {'age':<12}{'quotes':>9}{'windows':>9}{'net/sh':>10}{'t':>8}")
+        for b in sorted(sq):
+            per = sq[b]
+            v = [x[1] / x[0] for x in per.values()]
+            if len(v) < 5:
+                continue
+            sd = statistics.stdev(v) if len(v) > 1 else 0.0
+            t = statistics.mean(v) / (sd / math.sqrt(len(v))) if sd else 0.0
+            print(f"  {('< 5s','5-20s','20-60s','> 60s')[b]:<12}"
+                  f"{sum(x[0] for x in per.values()):>9,}{len(v):>9}"
+                  f"{statistics.mean(v):>+10.4f}{t:>+8.2f}")
+
     print("\nadverse-selection exposure of a resting order")
     # --- how far does the mid travel while an order rests?
     # A maker's gross edge is the half-spread and nothing else.  It survives only
@@ -1571,6 +1619,9 @@ if __name__ == "__main__":
                    help="require implied/realised sigma above this before "
                         "opening; the trade pays when the book prices more "
                         "uncertainty than the tape delivers. 0 disables")
+    p.add_argument("--log-stale", type=int, default=0,
+                   help="record stale quotes as samples instead of skipping "
+                        "them.  Trading still respects --max-stale.")
     p.add_argument("--maker", type=int, default=0,
                    help="post at the touch instead of taking.  Pays no fee and "
                         "earns the half-spread, at the cost of only filling "

@@ -2831,3 +2831,71 @@ selection must be taking. If posting at the touch here paid 5% a day net, the
 spread would already be narrower. The gross figure is precisely why the markout
 measurement is the only thing that matters, and it is what `makercheck.py` has
 been running for the last hour.
+
+---
+
+## 54. What the real account's fee rate says, and why stale quotes cannot be the answer here
+
+Section 1 verified the account this project started from: 14 days, $1.96M
+turnover, **gross edge 1.64¢ a share, taker fees 1.16¢, rebate 0.34¢, net
+0.82¢.** It pays $46,573 in taker fees, so it crosses the spread — it is a
+taker. Every measurement in sections 41 through 52 says a taker has no edge.
+Something has to give.
+
+The fee rate itself narrows it. Fee per share is `0.07 × p × (1-p)`, so
+1.16¢ solves to **p ≈ 0.79 or 0.21** — the account is not trading coin flips:
+
+```
+implied price 0.790   gross 2.08% of stake   fee 1.47%   implied win rate 0.807
+implied price 0.210   gross 7.82% of stake   fee 5.53%   implied win rate 0.226
+```
+
+Against what taking the prevailing quote actually returns at those prices:
+
+```
+5-min book 0.7-0.8   ask 0.747 -> won 0.743   taker net -1.70c
+5-min book 0.2-0.3   ask 0.245 -> won 0.246   taker net -1.13c
+hourly     0.70+                              taker net -2.83c   t=-3.30
+```
+
+**A gap of about 2.5¢ a share** between what the account achieves and what the
+displayed quote yields — more than a full spread. The account is not buying at
+the price my harness sees.
+
+### The obvious candidate, and why it fails
+
+Quotes that have stopped updating are the natural explanation: a frozen ask
+below fair value is free money to whoever crosses it first. This project's
+`--max-stale` guard exists to *refuse* those, on the grounds that a frozen book
+is not a tradeable price — which, if wrong, means the guard threw away the only
+real edge. So `run.py` gained `--log-stale`, recording quote age on every sample
+instead of discarding the observation, with `fresh` gating every path that
+spends money so the guard itself is not removed to run the experiment.
+
+But `stalecheck.py` already answered it, by polling the CLOB REST book whenever
+the websocket said a token was frozen. Thirty stale observations:
+
+| | n | |
+|---|---|---|
+| REST agrees, real quote present | 12 | a genuinely frozen market |
+| REST agrees, book empty | 10 | nothing to hit |
+| **REST disagrees** | **8** | **the feed is dead for that token** |
+
+The disagreements are not small — websocket 0.35/0.36 against REST 0.21/0.22,
+websocket 0.64/0.65 against REST 0.77/0.79. **Fourteen cents.**
+
+So a stale quote is real about 40% of the time and a lie about 27%, and the lies
+are exactly the favourable-looking ones: a price frozen where the market no
+longer is. Paper-trading stale quotes would fill a quarter of the time at prices
+that do not exist, at an average error many times the edge being hunted. That is
+the artifact the guard was built for, and it is still there.
+
+**This does not refute the stale-quote hypothesis — it says this harness cannot
+test it.** Testing it honestly requires confirming each frozen quote against the
+REST book before treating it as tradable, which is what a real bot would do and
+what `--log-stale` alone does not. Recorded as the open question it is, rather
+than answered with an instrument known to be lying 27% of the time.
+
+The remaining candidates for the account's 2.5¢: it is partly a maker (the fee
+figure is an average, and maker fills pay nothing, which would shift the implied
+price), or it is faster than the book on a feed that does not go dead.
