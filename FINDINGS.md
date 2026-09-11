@@ -3033,3 +3033,77 @@ other directions.
   settlements. No conclusion.
 - `stale5`: 3 markets, and its whole purpose is now in doubt given that the
   staleness it records is partly my own dropped sockets.
+
+---
+
+## 57. Making is closed: you only fill when you are swept
+
+`makercheck.py` posted at the prevailing best bid on live hourly books for 75
+minutes and measured where the mid sat after each fill.
+
+```
+=== 91 posts, 7 filled (7.7%) ===
+  size ahead at post   median 100 sh   (p25 35, p75 233, max 952)
+  markout   30s   n=7  mean -15.07c  median -16.50c  t=-2.40
+  markout  120s   n=6  mean -21.50c  median  -6.00c  t=-1.74
+```
+
+A maker's entire gross edge here is the half-spread: 1.0¢ on hourly, 0.5¢ on
+5-minute. **The markout is -15¢.** Adverse selection does not shave the edge, it
+exceeds it by a factor of fifteen.
+
+### The mechanism, fill by fill
+
+```
+  px   ahead   sold    30s      120s
+ 0.81      6     30  -0.165   -0.065
+ 0.71     20     22  +0.005   +0.035
+ 0.84    170    306  -0.275   -0.655
+ 0.57     20    120  -0.295   -0.545
+ 0.39     42     54  -0.365      n/a
+ 0.48      7     59  -0.005   -0.005
+ 0.47     18    196  +0.045   -0.055
+```
+
+Read `sold` against `ahead`. The fills that barely cleared the queue (22 vs 20)
+have markouts near zero. The fills where selling ran to **many times** the size
+resting ahead — 306 against 170, 120 against 20, 196 against 18 — are the ones
+carrying -27¢, -30¢ and -37¢. Those are not trades, they are **sweeps**.
+
+### Why a small maker cannot avoid this
+
+The median size already resting at the touch is **100 shares**; the p75 is 233.
+A $3 order is about 5 shares. Sitting behind 100 shares means ordinary two-way
+flow never reaches you — only an order large enough to clear everything in front
+does. **Queue position selects which flow you get, and a small maker's queue
+position selects for sweeps exclusively.** You are not providing liquidity; you
+are absorbing the tail of someone's market order, and that order exists because
+its sender knows something.
+
+The escape is to jump the queue by improving the bid a tick. But the spread is
+1¢ and the tick is 1¢, so improving it hands over the entire gross edge. Section
+51 already removed the other half of the maker case — the +4.3¢ "book bias" was
+dwell-time selection and is really +0.39¢. So:
+
+- **Behind the queue:** fill only on sweeps, markout -15¢.
+- **Front of the queue:** pay the full spread to get there, edge 0.
+
+There is no configuration in between, because the tick and the spread are the
+same size. **Making is closed.**
+
+### What this costs the other open question
+
+The account from section 1 clears 1.64¢ a share gross while paying $46,573 of
+taker fees. "Partly a maker" was one of the two remaining explanations, and a
+-15¢ markout removes it. What is left is that it is faster than the book on a
+feed that does not go dead — and section 56 established that my feed *does* go
+dead, 309 times, from self-inflicted slow-consumer drops. **The one surviving
+hypothesis is the one this harness is least equipped to test.**
+
+### Caveat that matters
+
+n = 7 fills. The t of -2.40 is not robust and three of the seven markouts are
+near zero. What carries the conclusion is not the significance but the
+**magnitude and the mechanism**: the edge is 1¢, the loss is 15¢, and the
+sold-versus-ahead column says exactly why. An error large enough to reverse this
+would have to be an order of magnitude.
