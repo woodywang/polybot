@@ -3278,3 +3278,64 @@ matter, and their errors are large (14¢) and biased toward looking favourable.
 That the two instruments disagree about staleness is not a mystery any more;
 **one of them was being disconnected nineteen times more often because it was
 being asked to absorb nineteen times more data.**
+
+---
+
+## 61. The venue basis is the TWAP lag, and it is worth 13 points of probability
+
+These markets settle on Chainlink; the model and the book both watch exchange
+prices. The `basis` table has been recording the gap all along and it had never
+been read.
+
+```
+btc, 1,541 samples over 6.4h
+  median +1.14 bps   p10 -2.98   p90 +4.90   |max| 22.74
+```
+
+A level difference is harmless: settlement compares the window's end against its
+own open on the *same* source, so any constant basis cancels exactly. Only
+movement **inside** the window reaches the payoff. So the quantity that matters
+is how fast it moves:
+
+```
+basis change over    60s: sd 5.05 bps   mean +0.02
+basis change over   300s: sd 5.15 bps   mean -0.01
+basis change over  3600s: sd 5.17 bps   mean -0.04
+```
+
+**Flat across all three horizons.** The basis is not a drifting spread — it is
+noise that fully decorrelates inside a minute. That shape is diagnostic: a
+series that reaches its full variance by 60s and grows no further is the
+signature of a **60-second TWAP lag**, which is exactly what
+`btc-usd-twap-60s` is.
+
+### What it would cost if unmodelled
+
+Near the money the digital's sensitivity to a strike error is
+`phi(0) / sigma_window`, so with a 5-minute window volatility around 12-16 bps:
+
+```
+0.4 x 5.05 / 12  =  16.8 points of probability
+0.4 x 5.05 / 16  =  12.6 points
+```
+
+**Thirteen to seventeen percentage points of error on every near-the-money
+quote**, from a five-basis-point price difference. That is the arithmetic behind
+the earlier collapse in log-loss from 1.44 to 0.30 when the strike stopped being
+a point sample and became the integral the settlement source actually uses. The
+model was not slightly wrong before; it was wrong by more than the entire spread
+it was hunting.
+
+### Closed, not open
+
+Two reasons this is not an opportunity. `fair_up` already integrates the
+consolidated ticks across the averaging window (`i_known`), so the lag is
+modelled rather than suffered. And the tick series is itself a **median across
+Binance and Coinbase** — the consolidation happens before the model sees a
+price. The 5 bps is measured *after* both of those.
+
+What is left is genuine cross-venue disagreement against Chainlink's own
+aggregate, and it is unpredictable at every horizon tested. It sets a noise
+floor on this instrument that no model removes: **anyone pricing these
+contracts, including the book, is working with a settlement reference they can
+only estimate.** That is a reason the book is hard to beat, not a way to beat it.

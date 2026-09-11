@@ -54,7 +54,14 @@ async def main(minutes=12):
             if not toks:
                 await asyncio.sleep(2); continue
             try:
-                async with websockets.connect(WS, ping_interval=None) as ws:
+                # max_queue=None, as in run.py.  The first run of this
+                # diagnostic used the library default and reported the websocket
+                # book disagreeing with REST 27% of the time -- which section 60
+                # showed is what a socket being closed for slow consumption
+                # looks like.  Rerun with the backpressure removed: if the
+                # disagreements were my own drops, they go away.
+                async with websockets.connect(WS, ping_interval=None,
+                                              max_queue=None) as ws:
                     await ws.send(json.dumps({"assets_ids": toks, "type": "market"}))
                     n0 = len(toks)
                     while time.time() < stop and len(meta) == n0:
