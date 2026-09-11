@@ -2792,6 +2792,11 @@ The book was never mispricing anything worth having.
 
 ## 53. There are no liquidity rewards on the crypto hourlies
 
+> **Incomplete — see section 92.** `clobRewards` was the right field to check
+> and the answer was right, but it is not the only rebate. `feeSchedule` and
+> `makerRebatesFeeShareBps` were never looked at, and the 5-minute markets carry
+> a maker rebate the hourly ones do not.
+
 Polymarket runs a maker-incentive program, and the whole maker case would look
 different if it paid here: rewards are income that does not care whether the
 spread survives adverse selection. The market metadata answers it.
@@ -5088,3 +5093,66 @@ waiting to be made.
 
 `latency(eth)`: pending. If the 200ms peak does not reappear, sections 82, 85 and
 86 are struck.
+
+---
+
+## 92. There is a maker rebate, on the instrument I stopped testing
+
+Section 53 checked `clobRewards` for a liquidity-rewards pool, found it absent on
+crypto markets, and concluded a maker here "earns the spread and only the
+spread". That was the right check and the wrong conclusion, because it was not
+the only field. Two others were sitting in the same market object, unexamined:
+
+```
+feeSchedule = {'exponent': 1, 'rate': 0.07, 'takerOnly': True, 'rebateRate': 0.2}
+makerRebatesFeeShareBps = 10000
+```
+
+Surveying both instruments:
+
+```
+5-minute crypto   makerRebatesFeeShareBps = 10000   on all 9 markets
+hourly crypto     absent                            on all 6
+Fed / sports      absent                            (rate 0.04-0.05, rebateRate 0.15-0.25)
+```
+
+**10000 basis points is 100%.** The 5-minute crypto markets pay makers a fee
+share the hourly markets do not, and `takerOnly: True` confirms what was already
+known — makers pay nothing.
+
+### What it does to the arithmetic
+
+Every maker test in this project ran on **hourly** markets, because section 46
+measured a 0.5c half-spread against 2.5c of 10-second travel on 5-minute markets
+and I closed that instrument on the ratio. With a 100% fee-share rebate the
+5-minute maker's gross is not the half-spread:
+
+```
+    p   taker fee   half-spread   gross   10s travel   ratio
+ 0.50       1.75c         0.50c   2.25c        2.50c    0.90
+ 0.60       1.68c         0.50c   2.18c        2.50c    0.87
+ 0.70       1.47c         0.50c   1.97c        2.50c    0.79
+```
+
+**The rebate more than quadruples the gross at the money** — 0.50c to 2.25c —
+and moves the ratio from 0.20 to 0.90. That is still below the hourly instrument's
+unconditional 2.00, but section 76 showed the unconditional ratio is not what
+decides it: conditional post-fill travel is 5x larger, and hourly lost 6.20c a
+fill anyway.
+
+So the question is open again on an instrument I had closed, and **the missing
+number is the one thing I never measured: maker markout on 5-minute markets.**
+`makercheck.py` gains a 5-minute mode and is running it now.
+
+### What I got wrong, and how
+
+Not an arithmetic error — an incomplete search. I checked the field that
+answers "is there a liquidity-rewards pool", got a correct no, and stopped. The
+fee schedule itself was in the same JSON object I had already printed twice, in
+sections 53 and 87, and I had filtered it out both times because I was grepping
+for `reward`, not reading the object.
+
+**The instrument comparison in section 88 is also affected.** Everything it said
+about settlement observability, feed rate and spread stands — but it concluded
+hourly was structurally better *for everything*, and for a maker specifically
+that now depends on a rebate it did not know about.

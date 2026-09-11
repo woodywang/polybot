@@ -25,6 +25,12 @@ MARKOUTS = (30.0, 120.0)
 # a tick above the touch and MINCAP refuses to post at all unless (mid - price)
 # still clears this, which is the configuration section 67 opened up.  With
 # IMPROVE=0 and MINCAP=-1 this is the original at-the-touch measurement.
+# MK_5MIN: the 5-minute crypto markets carry makerRebatesFeeShareBps = 10000
+# and the hourly ones do not, which inverts the instrument comparison every
+# maker test so far was built on.  Making was never measured here because
+# section 46 showed a 0.5c half-spread against 2.5c of 10s travel; with a
+# 100% fee-share rebate the gross is ~2.25c at the money, not 0.5c.
+FIVE = __import__("os").environ.get("MK_5MIN", "") == "1"
 IMPROVE = int(__import__("os").environ.get("MK_IMPROVE", "0"))
 MINCAP = float(__import__("os").environ.get("MK_MINCAP", "-1"))
 MAXWAIT = 600.0                      # give a post ten minutes to fill
@@ -56,6 +62,19 @@ async def main(minutes=60):
 
     async def refresh():
         while time.time() < stop:
+            if FIVE:
+                base = int(time.time() // 300) * 300
+                slugs = [f"{a}-updown-5m-{base + k * 300}"
+                         for a in ASSETS for k in (0, 1)]
+                for s in slugs:
+                    try:
+                        for m in get(f"{GAMMA}?slug={s}&closed=false"):
+                            for t in json.loads(m["clobTokenIds"]):
+                                meta[t] = m["slug"]
+                    except Exception:
+                        pass
+                await asyncio.sleep(30)
+                continue
             base = int(time.time() // 3600) * 3600
             slugs = [hourly_slug(a, base + k * 3600)
                      for a in ASSETS.values() for k in (0, 1)]
@@ -153,7 +172,12 @@ async def main(minutes=60):
           f"({len(fills)/max(len(done),1)*100:.1f}%) ===")
     if not done:
         return
-    print(f"  improve {IMPROVE} tick(s), min capture {MINCAP:+.3f}")
+    print(f"  {'5-MINUTE' if FIVE else 'hourly'} markets, improve {IMPROVE} "
+          f"tick(s), min capture {MINCAP:+.3f}")
+    if FIVE and fills:
+        reb = statistics.mean(0.07 * o["price"] * (1 - o["price"]) for o in fills)
+        print(f"  maker fee-share rebate (100% of the taker fee at fill price):"
+              f" +{reb*100:.2f}c/share")
     print(f"  size ahead at post  median {statistics.median([o['ahead'] for o in done]):.0f} sh")
     cap = [o.get("capture") for o in done if o.get("capture") is not None]
     if cap:
