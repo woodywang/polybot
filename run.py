@@ -1209,6 +1209,51 @@ def report(a):
                   f"{statistics.mean(v):>+12.4f}{statistics.mean(nt):>+10.4f}"
                   f"{tt:>+8.2f}")
 
+    # --- is the edge in the book's belief, or only inside the spread?
+    # Section 44 found real momentum in the price path but could not say whether
+    # the book misses it.  These are two different questions and the spread is
+    # what separates them.  The book's belief about Up is the mid,
+    # (ask_up + 1 - ask_dn)/2; what a taker actually pays is the ask.  If the
+    # outcome beats the mid, the book is wrong.  If it beats the mid but not the
+    # ask, the book is wrong by less than the spread and only a maker can
+    # collect it.
+    fb = {}
+    for slug, tau, au, ad in db.execute(
+            "SELECT slug,tau,ask_up,ask_dn FROM pairs WHERE tau IS NOT NULL"):
+        if slug not in res or not au or not ad:
+            continue
+        m_up = (au + 1.0 - ad) / 2.0
+        side = "Up" if m_up >= 0.5 else "Down"
+        mid = m_up if side == "Up" else 1.0 - m_up
+        ask = au if side == "Up" else ad
+        b = min(int((mid - 0.5) * 10), 4)
+        e = fb.setdefault(b, {}).setdefault(starts.get(slug, slug), [0, 0.0, 0.0, 0.0])
+        y = 1.0 if res[slug] == side else 0.0
+        e[0] += 1
+        e[1] += y - mid                                  # book wrong?
+        e[2] += y - ask - fair.taker_fee(ask)            # taker net
+        e[3] += ask - mid                                # half-spread paid
+    if fb:
+        print("\nfavourite by book MID: is the book wrong, or is it the spread?")
+        print(f"  {'mid':<12}{'quotes':>9}{'windows':>8}{'vs mid':>9}{'t':>7}"
+              f"{'half-spd':>10}{'taker net':>11}{'t':>7}")
+        for b in sorted(fb):
+            per = fb[b]
+            vm = [x[1] / x[0] for x in per.values()]
+            vt = [x[2] / x[0] for x in per.values()]
+            hs = [x[3] / x[0] for x in per.values()]
+            if len(vm) < 5:
+                continue
+            sm = statistics.stdev(vm) if len(vm) > 1 else 0.0
+            st_ = statistics.stdev(vt) if len(vt) > 1 else 0.0
+            tm = statistics.mean(vm) / (sm / math.sqrt(len(vm))) if sm else 0.0
+            tt = statistics.mean(vt) / (st_ / math.sqrt(len(vt))) if st_ else 0.0
+            lbl = f"{0.5+b*0.05:.2f}-{0.55+b*0.05:.2f}" if b < 4 else "0.70+"
+            print(f"  {lbl:<12}{sum(x[0] for x in per.values()):>9,}{len(vm):>8}"
+                  f"{statistics.mean(vm):>+9.4f}{tm:>+7.2f}"
+                  f"{statistics.mean(hs):>+10.4f}"
+                  f"{statistics.mean(vt):>+11.4f}{tt:>+7.2f}")
+
     # Same legs, bucketed by price paid instead.  The taker fee is 7%x(1-p) of
     # stake, so it costs 3.5% at the money and 0.14% at 98c: if any edge
     # survives the fee anywhere it is at the extremes, and that is a different

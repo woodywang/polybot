@@ -2169,6 +2169,12 @@ that out from a rule that cannot be true than from a number I want to believe.
 
 ## 44. Five-minute crypto has real momentum — measured with no volatility estimate
 
+> **Partly retracted — see section 45.** The momentum result stands; the
+> claim that it "cross-validates" section 43 does not. The 30-day test scores
+> the book against the *random walk*, section 43 scored it against the *book's
+> ask*. Those are different quantities and their numerical agreement was a
+> coincidence I read as confirmation.
+
 Section 43's favourite effect had an obvious alternative explanation: "the
 favourite" is just "the side currently ahead", and five trending hours would
 manufacture it. 64 windows cannot separate those. 30 days of 1-minute klines
@@ -2257,3 +2263,63 @@ settle it. The next measurement has to compare the outcome against the **book's*
 price, split by mid and by ask: if the book's mid is calibrated but its ask is
 not beatable, the entire edge sits inside the spread, and that makes this a
 maker question rather than a taker one.
+
+---
+
+## 45. The book prices the momentum. There is no taker edge.
+
+Section 44 ended with the right question: momentum in the price path is only
+worth money if the **book** misses it. `pairs` quotes both sides at one instant,
+so the book's belief about Up is the mid, `(ask_up + 1 - ask_dn)/2`, and what a
+taker pays is the ask. Scoring the outcome against each separates "the book is
+wrong" from "the book is wrong by less than the spread".
+
+```
+mid            quotes windows   vs mid      t  half-spd  taker net      t
+0.50-0.55      52,358      66  +0.0601  +2.32   +0.0075    +0.0354  +1.36
+0.55-0.60      37,057      61  +0.0239  +0.78   +0.0070    +0.0012  +0.04
+0.60-0.65      28,596      60  +0.0086  +0.25   +0.0070    -0.0112  -0.33
+0.65-0.70      25,546      61  +0.0242  +0.83   +0.0076    +0.0081  +0.28
+0.70+          65,291      61  +0.0067  +0.77   +0.0058    -0.0003  -0.04
+```
+
+Compare the `vs mid` column against what section 44 predicted from 30 days of
+klines for the same bands: +3.14, +5.28, +4.10, +2.20, −1.24 points. The book
+delivers +6.01, +2.39, +0.86, +2.42, +0.67, and only the first has any t at all.
+**Where the 30-day data says the momentum is largest — 0.55 to 0.65 — the book
+is right to within a point.** The random walk misses the persistence; the book
+does not.
+
+And the spread is not the obstacle: the half-spread is 0.7¢ while the fee at
+these prices is about 1.6¢. The fee is more than twice the spread.
+
+### Section 43 was 66 windows of noise
+
+The one cell with a t is 0.50-0.55 at +2.32 — and that is the band the 30-day
+data ranks **weakest** of the positive buckets (+3.14 points, the smallest).
+Section 43's headline pooled quotes ≤0.65, where this bucket supplies 52k of
+118k, so §43's result *is* this cell. One bucket out of five, 66 windows, t =
+2.3, pointing the wrong way relative to 8,600 windows of history. That is what
+a false positive looks like, and I built two live arms on it before checking.
+
+The forward-test arms stay up. They cost nothing, and a rule I now expect to
+fail is a better test of the harness than one I expect to pass — `--fav-only 1`
+and `-1` are complements and cannot both profit, so they audit the ledger
+regardless of what they say about the market.
+
+### Where this leaves the whole project
+
+| question | answer |
+|---|---|
+| does the model beat the book? | no (§41) |
+| is the book calibrated? | yes (§42) |
+| does hedging add anything? | no, it is a second directional bet (§40) |
+| does 5-min crypto have momentum? | yes, genuinely (§44) |
+| does the book price that momentum? | yes (this section) |
+| is there any taker edge? | **no** |
+
+Taking is closed on arithmetic and now on mechanism too. The fee is 1.6¢ where
+the spread is 0.7¢, so the only remaining structure in this instrument is to be
+on the receiving side of both. `makercheck.py` has been measuring markout on
+resting hourly bids for the last half hour, and it decides whether anything is
+left here at all.
