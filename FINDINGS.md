@@ -4821,3 +4821,37 @@ have already done the work.**
 
 That is the honest end of the latency thread. The remaining check is whether the
 peak replicates on ETH at all.
+
+---
+
+## 87. Settlement risk is zero, checked market by market
+
+Every P&L number in this project assumes the market settles the way it says it
+does. That assumption had never been tested — and a venue that occasionally
+resolves against observable truth carries a tail risk no model prices.
+
+Checking all 1,581 hourly markets in `histtest22.json` against the Binance 1-hour
+candle they settle on (close vs open):
+
+```
+agree              1,581
+DISAGREE               0
+no candle data         0
+disagreement rate  0.00%
+```
+
+**Perfect, over 22 days and three assets.** Hourly markets settle exactly as
+documented. Whatever is wrong with trading this instrument, settlement integrity
+is not part of it.
+
+This also retroactively validates a dependency: sections 48, 49 and 65 all score
+the book against outcomes reconstructed from Binance klines, and sections 82
+onward use those klines as ground truth for the strike. **That reconstruction is
+now confirmed to be the same object the venue actually pays on**, rather than a
+close approximation that happened to work.
+
+Worth noting what the check cost: one query against data already on disk. The
+assumption had sat unexamined through eighty-six sections of increasingly
+careful measurement — including several where the instrument turned out to be
+the problem. **The cheapest checks are the ones most likely to go unmade,
+precisely because nothing draws attention to them.**
