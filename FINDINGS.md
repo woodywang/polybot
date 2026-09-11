@@ -1805,3 +1805,45 @@ is a selection bias, not alpha.
 
 What has *not* been tested is a fill: every number here assumes the quoted price
 is transactable for the size traded, and no order has ever been sent.
+
+---
+
+## 38. A live arm crosses t = 2 — and why that is not yet a result
+
+| arm | markets | mean/market | sd | t | markets for t=2 |
+|---|---|---|---|---|---|
+| **`spot`** (no model, spot vs strike) | 62 | **+14.26%** | 47.8% | **+2.35** | 45 |
+| `fav` (ask ≥ 0.50) | 46 | +9.05% | 31.6% | +1.94 | 49 |
+| `filt` (ask ≥ 0.50 + VRP) | 43 | +4.77% | 40.1% | +0.78 | 282 |
+
+`--report` totals: `spot` +14.04% on $736 of stake, `fav` +7.69%, `filt` +6.16%.
+All three survivors are positive.
+
+**Six arms have been watched this session.** Bonferroni puts the threshold at
+α = 0.05/6, i.e. **|t| > 2.64**, and 2.35 does not reach it. This is the same
+trap as section 29, where two of twelve subgroups cleared a nominal t = 2 and
+neither survived correction. Reporting `spot` as significant because it is the
+one that crossed would be selecting on the outcome.
+
+### An unresolved contradiction worth stating
+
+The `spot` rule was measured **offline** in section 19, on live quotes only and
+per observation: **+0.68¢ a share, t = 0.27 — no edge**. The live arm running the
+same rule reports +14.26% per market at t = 2.35.
+
+They are not the same measurement — the live arm adds the staleness guard,
+sequential hedging, Kelly sizing and a drawdown limit, and it aggregates by
+market rather than by observation. But the gap is large enough that **at most
+one of them describes reality, and it is not yet clear which.** Recording it
+rather than picking the flattering one.
+
+### Circuit breaker aftermath
+
+`base` and `vrp` halted earlier at 31.0% and 27.6% drawdown and never reopen —
+the halt has no reset path. Both had zero committed capital and no fills for
+over half an hour, so they were stopped. Their data is kept; they are the two
+arms with the most negative t, and the breaker took exactly them while leaving
+`spot` (+2.35) and `fav` (+1.94) untouched.
+
+**Sample still insufficient under correction. No parameters changed.** The
+hourly arm's first markets settle shortly.
