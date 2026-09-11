@@ -35,6 +35,11 @@ def fair_up(spot, strike, tau, sigma, w=TWAP_W, i_known=0.0):
         mean, var = spot, sigma * sigma * (tau - 2.0 * w / 3.0)
     else:
         # inside the window: (w - tau) seconds of the average are already fixed.
+        # A missing i_known is a caller error, not a zero: taking it literally
+        # makes the mean spot*tau/w, which is a fraction of the real price and
+        # silently returns 0 or 1. Fall back to "the elapsed part sat at spot".
+        if i_known <= 0.0:
+            i_known = spot * (w - tau)
         mean = (i_known + spot * tau) / w
         var = sigma * sigma * tau ** 3 / (3.0 * w * w)
     if var <= 0.0:
@@ -99,6 +104,63 @@ def needed_move(p_now, p_target, sigma, tau, w=TWAP_W):
     p_target = min(max(p_target, eps), 1 - eps)
     sd = sigma * max(tau - 2.0 * w / 3.0, tau ** 3 / (3.0 * w * w)) ** 0.5
     return abs(_N.inv_cdf(p_target) - _N.inv_cdf(p_now)) * sd
+
+
+def implied_sigma(p_mkt, spot, strike, tau, w=TWAP_W, i_known=0.0,
+                  lo=1e-6, hi=1e4):
+    """Invert the model for the sigma the book is pricing.
+
+    Gamma scalping pays out roughly (realised vol - implied vol): buying the
+    cheap side as the implied probability swings, then flattening, is exactly a
+    long-gamma rehedge. So the edge condition is not "is the model right about
+    direction" -- it is whether the tape is moving more than the quotes assume.
+    Bisection because the model is monotone in sigma on each side of the money.
+    """
+    if tau <= 0 or not (0.0 < p_mkt < 1.0):
+        return None
+    if abs(spot - strike) < 1e-12:
+        return None                    # at the money every sigma gives 0.5
+    up = spot > strike
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        p = fair_up(spot, strike, tau, mid, w, i_known)
+        # above the strike more vol pulls p down toward 0.5, below it pushes up
+        if (p > p_mkt) == up:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def hedge_band(price, p_fair, k=2.5, floor=0.004, cap=0.10):
+    """Required locked profit before flattening a leg -- a no-trade band.
+
+    Whalley-Wilmott says the optimal rehedge band under transaction costs
+    scales as (cost / gamma)^(1/3) rather than being a constant.  Its delta
+    form does not carry over dimensionally here (this gamma is probability per
+    dollar squared, ~1e-5 on BTC, so the cube root pins to any cap), but the
+    trade-off does: hedging costs a fee, and hedging early throws away
+    optionality that is still worth something.
+
+    So the band is the fee actually payable, scaled by how much of the outcome
+    is still in doubt.  4p(1-p) is 1 at the money and goes to 0 once the
+    result is effectively settled, which is exactly when locking should become
+    cheap.  A fixed threshold is wrong in both regimes at once.
+    """
+    fee = FEE_RATE * price * (1.0 - price)
+    doubt = 4.0 * p_fair * (1.0 - p_fair)
+    return min(max(fee * (1.0 + k * doubt), floor), cap)
+
+
+def digital_gamma(spot, strike, tau, sigma, w=TWAP_W, i_known=0.0, h=None):
+    """d2p/dS2 of the model, by central difference. Explodes near expiry."""
+    if tau <= 0 or sigma <= 0:
+        return 0.0
+    h = h or max(sigma * tau ** 0.5 * 0.05, 1e-6)
+    a = fair_up(spot - h, strike, tau, sigma, w, i_known)
+    b = fair_up(spot, strike, tau, sigma, w, i_known)
+    c = fair_up(spot + h, strike, tau, sigma, w, i_known)
+    return (a - 2 * b + c) / (h * h)
 
 
 def realized_sigma(ticks, lookback=180.0, bucket=5.0, floor=1e-9):
@@ -200,6 +262,32 @@ def _demo():
     # moving the model further needs more distance; no move needed if already there
     assert needed_move(0.5, 0.5, 3.0, 120) < 1e-9
     assert needed_move(0.5, 0.7, 3.0, 120) < needed_move(0.5, 0.9, 3.0, 120)
+
+    # --- options-desk imports -------------------------------------------
+    # implied sigma round-trips: price with one, recover it from the price
+    S, K2, tau2, sig2 = 100_000.0, 100_000.0, 120.0, 3.0
+    p = fair_up(S + 40, K2, tau2, sig2)
+    back = implied_sigma(p, S + 40, K2, tau2)
+    assert abs(back - sig2) / sig2 < 0.01, (back, sig2)
+
+    # a richer quote than the model implies a HIGHER vol above the strike
+    hi_q = implied_sigma(p + 0.05, S + 40, K2, tau2)
+    assert hi_q < sig2, (hi_q, sig2)     # richer Up => less vol needed
+
+    # gamma is largest near the strike and grows as expiry approaches
+    g_atm = abs(digital_gamma(S + 1, K2, 60, sig2))
+    g_otm = abs(digital_gamma(S + 200, K2, 60, sig2))
+    assert g_atm > g_otm, (g_atm, g_otm)
+    assert abs(digital_gamma(S + 5, K2, 20, sig2)) > abs(digital_gamma(S + 5, K2, 200, sig2))
+    # and a missing i_known must not silently become a price of spot*tau/w
+    assert 0.4 < fair_up(S, K2, 30, sig2, 60.0) < 0.6
+
+    # the band demands more while the outcome is in doubt, and relaxes once
+    # it is effectively settled -- at which point locking costs no optionality
+    assert hedge_band(0.50, 0.50) > hedge_band(0.50, 0.95)
+    assert hedge_band(0.50, 0.50) > hedge_band(0.90, 0.50)   # fee is smaller there
+    assert 0.004 <= hedge_band(0.99, 0.99) <= 0.10
+    assert hedge_band(0.50, 0.50) > 0.015                    # beats the old fixed 1.5c
 
     # fee formula against a real fill pulled from the chain:
     # 30.9375 shares @ 0.32 was charged 0.47124 USDC

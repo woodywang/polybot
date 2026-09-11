@@ -54,13 +54,16 @@ CREATE TABLE IF NOT EXISTS regime(
 CREATE TABLE IF NOT EXISTS obs(
   ts REAL, slug TEXT, kind TEXT, tau REAL, spot REAL, strike REAL, sigma REAL,
   fair_up REAL, naive_up REAL, side TEXT, ask REAL, depth REAL, edge REAL,
-  fill_px REAL, fill_sz REAL, fee REAL, intens REAL, tps REAL);
+  fill_px REAL, fill_sz REAL, fee REAL, intens REAL, tps REAL,
+  isig REAL, band REAL, equity REAL);
 CREATE INDEX IF NOT EXISTS obs_slug ON obs(slug);
 CREATE TABLE IF NOT EXISTS pairs(
   ts REAL, slug TEXT, tau REAL, ask_up REAL, ask_dn REAL, cost REAL,
   intens REAL, tps REAL);
 CREATE TABLE IF NOT EXISTS matched(
   ts REAL, slug TEXT, shares REAL, cost_open REAL, cost_lock REAL, pair REAL);
+CREATE TABLE IF NOT EXISTS equity(
+  ts REAL, slug TEXT, pnl REAL, equity REAL, committed REAL);
 CREATE TABLE IF NOT EXISTS basis(
   ts REAL, asset TEXT, venue REAL, chainlink REAL, bps REAL);
 """
@@ -130,6 +133,43 @@ class State:
         self.lots = {}                # (slug, side) -> deque([shares, cost/share])
         self.pending = set()          # (slug, side) with a fill in flight
         self.kl = {k: {} for k in a.assets}        # asset -> interval -> closes
+        # Real money management: an account of `bankroll` dollars cannot deploy
+        # more than it holds, and capital stays committed until the market it
+        # is in settles. Peak simultaneous exposure -- not cumulative turnover
+        # -- is the number that has to be funded.
+        self.equity = a.bankroll
+        self.committed = 0.0
+        self.mkt_cost = {}                         # slug -> capital tied up
+        self._schema_check()       # last: it exercises every field above
+
+    def _schema_check(self):
+        """Write one row of every shape at boot and roll it back.
+
+        Every table here has gained columns mid-run at least once, and a
+        positional INSERT that drifts only fails when the first live row is
+        written -- minutes in, after the process looked healthy."""
+        snap = dict(tau=0, spot=0, strike=0, sigma=0, fair_up=.5, naive_up=.5,
+                    intens=1, tps=0, isig=None, band=None)
+        try:
+            log(self, "sample", "__schema__", snap, "Up", 0.5, 1.0, 0.0)
+            log(self, "open", "__schema__", snap, "Up", 0.5, 1.0, 0.0, 1.0)
+            self.db.execute("INSERT INTO pairs VALUES(?,?,?,?,?,?,?,?)",
+                            (0, "__schema__", 0, .5, .5, 1., 1., 0.))
+            self.db.execute("INSERT INTO matched VALUES(?,?,?,?,?,?)",
+                            (0, "__schema__", 0., 0., 0., 0.))
+            self.db.execute("INSERT INTO equity VALUES(?,?,?,?,?)",
+                            (0, "__schema__", 0., 0., 0.))
+            self.db.execute("INSERT INTO regime VALUES(?,?,?,?,?)",
+                            ("__schema__", 0., 0., 0., 0.))
+            self.db.execute("INSERT INTO basis VALUES(?,?,?,?,?)",
+                            (0, "x", 0., 0., 0.))
+        finally:
+            self.db.rollback()
+            for t in ("obs", "pairs", "matched", "equity", "regime"):
+                self.db.execute(f"DELETE FROM {t} WHERE slug='__schema__'")
+            self.db.commit()
+        self.pos.clear(); self.lots.clear()
+        self.committed = 0.0; self.mkt_cost.clear()
 
     def push(self, asset, venue, ts, px, qty=0.0):
         """Consolidate venues by median -- Chainlink aggregates across spot
@@ -433,9 +473,21 @@ async def resolve(st):
             for m in await asyncio.to_thread(gamma, [slug], True):
                 pr = json.loads(m.get("outcomePrices") or "[]")
                 if len(pr) == 2 and {pr[0], pr[1]} == {"1", "0"}:
+                    won = "Up" if pr[0] == "1" else "Down"
                     st.db.execute("UPDATE markets SET outcome=? WHERE slug=?",
-                                  ("Up" if pr[0] == "1" else "Down", m["slug"]))
+                                  (won, m["slug"]))
                     got += 1
+                    sl = m["slug"]
+                    cost = st.mkt_cost.pop(sl, 0.0)
+                    if cost:
+                        payout = st.held(sl, won)[0]        # $1 per winning share
+                        st.committed = max(st.committed - cost, 0.0)
+                        st.equity += payout - cost
+                        st.db.execute("INSERT INTO equity VALUES(?,?,?,?,?)",
+                                      (time.time(), sl, payout - cost,
+                                       st.equity, st.committed))
+                    for k in [k for k in st.pos if k[0] == sl]:
+                        st.pos.pop(k, None); st.lots.pop(k, None)
         st.db.commit()
         if got:
             print(f"[resolve] open={len(rows)} due={len(due)} settled={got}",
@@ -446,13 +498,21 @@ async def resolve(st):
 # --------------------------------------------------------------- trading
 def log(st, kind, slug, snap, side, ask, depth, ed, sz=None):
     fee = fair.taker_fee(ask, sz) if sz else None
-    st.db.execute("INSERT INTO obs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    # Named columns, not positional: the table has grown three times and a
+    # positional INSERT drifts silently until it hits a live row.
+    st.db.execute(
+        "INSERT INTO obs(ts,slug,kind,tau,spot,strike,sigma,fair_up,naive_up,"
+        "side,ask,depth,edge,fill_px,fill_sz,fee,intens,tps,isig,band,equity)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                   (time.time(), slug, kind, snap["tau"], snap["spot"],
                    snap["strike"], snap["sigma"], snap["fair_up"],
                    snap["naive_up"], side, ask, depth, ed,
                    ask if sz else None, sz, fee,
-                   snap.get("intens"), snap.get("tps")))
+                   snap.get("intens"), snap.get("tps"),
+                   snap.get("isig"), snap.get("band"), st.equity))
     if sz:
+        st.committed += ask * sz + fee
+        st.mkt_cost[slug] = st.mkt_cost.get(slug, 0.0) + ask * sz + fee
         p = st.pos.setdefault((slug, side), [0.0, 0.0])
         p[0] += sz
         p[1] += ask * sz + fee
@@ -481,6 +541,7 @@ async def fill(st, kind, slug, side, tok, snap, cap):
             if ed <= 0 or ask > st.cfg.max_price:
                 return
             room = st.cfg.max_per_market - st.held(slug, side)[1]
+            room = min(room, st.equity - st.committed)      # cannot spend what is committed
             stake = min(st.cfg.max_usd,
                         kelly_usd(snap["fair"], ask, st.cfg.bankroll,
                                   st.cfg.kelly) if st.cfg.kelly > 0
@@ -490,11 +551,13 @@ async def fill(st, kind, slug, side, tok, snap, cap):
             ed = 1.0 - cap - ask - fair.taker_fee(ask)
             if ed < st.cfg.min_lock:
                 return                           # the move went away
-            sz = min(st.cfg.max_usd / ask, depth, cap_shares(st, slug, side))
+            sz = min(st.cfg.max_usd / ask, depth, cap_shares(st, slug, side),
+                     max(st.equity - st.committed, 0.0) / ask)
             if sz > 0:          # re-price against the exact lots we will consume
                 _, c = st.take_lots_peek(slug,
                                          "Down" if side == "Up" else "Up", sz)
-                if 1.0 - (c / sz) - ask - fair.taker_fee(ask) < st.cfg.min_lock:
+                if 1.0 - (c / sz) - ask - fair.taker_fee(ask) < (snap.get("band")
+                    or st.cfg.min_lock):
                     return
         if sz > 0:
             log(st, kind, slug, snap, side, ask, depth, ed, sz)
@@ -578,6 +641,13 @@ async def strategy(st):
             a_up, d_up = st.books.get(mk["up"], Book()).best_ask()
             a_dn, d_dn = st.books.get(mk["dn"], Book()).best_ask()
 
+            # Gamma-scalp edge condition: the trade pays roughly
+            # (realised vol - implied vol), so record what the book itself is
+            # pricing rather than only what the tape did.
+            if a_up and a_dn:
+                snap["isig"] = fair.implied_sigma(
+                    (a_up + 1.0 - a_dn) / 2.0, spot, k, tau, w, ik)
+
             # How much would both sides cost RIGHT NOW, fees included?  They are
             # complementary tokens, so this should never be under a dollar.
             # Recorded rather than assumed.
@@ -630,7 +700,10 @@ async def strategy(st):
                     # only asked whether the pair came in under $1, which fires
                     # on winners too and flattens a 74%-accurate signal into a
                     # flat few percent.
-                    cheap = 1.0 - basis - ask - fair.taker_fee(ask) >= st.cfg.min_lock
+                    band = (fair.hedge_band(ask, p) if st.cfg.adaptive_band
+                            else st.cfg.min_lock)
+                    snap["band"] = band
+                    cheap = 1.0 - basis - ask - fair.taker_fee(ask) >= band
                     plus = fair.edge(p, ask) > st.cfg.min_edge
                     want = {"cost": cheap, "edge": plus,
                             "both": cheap and plus}[st.cfg.lock_mode]
@@ -643,8 +716,21 @@ async def strategy(st):
                 # --- open: directional, and only with enough of the window
                 # left for the price to move far enough to lock it.
                 ed = fair.edge(p, ask)
+                # Filters chosen by measuring which features separate legs
+                # that got hedged from legs that went naked (681 legs, AUC):
+                #   ask 0.768  -- buy the side the book already favours; a
+                #                 coin-flip leg has no drift to open a hedge
+                #   depth 0.348 (inverted) -- a thin best ask is a quote about
+                #                 to move; a deep one is someone who means it
+                #   intensity 0.376 (inverted) -- a busy tape means makers
+                #                 widen and the stale-quote edge is gone
                 room = st.cfg.max_per_market - st.held(slug, side)[1]
+                budget = st.equity - st.committed
                 if (ed > st.cfg.min_edge and ask <= st.cfg.max_price
+                        and ask >= st.cfg.min_ask
+                        and depth <= st.cfg.max_depth
+                        and r_not <= st.cfg.max_intensity
+                        and budget > st.cfg.min_usd
                         and room > 0 and tau > st.cfg.min_tau_open
                         and r_not >= st.cfg.min_intensity
                         and st.cfg.er_min <= (mk.get("er1") or 0.5)
@@ -670,7 +756,8 @@ async def heartbeat(st):
         print(f"[hb] mk={len(st.markets)} tok={len(st.wanted)} "
               f"open={q('SELECT COUNT(*) FROM obs WHERE kind=\"open\"')} "
               f"lock={q('SELECT COUNT(*) FROM obs WHERE kind=\"lock\"')} "
-              f"res={q('SELECT COUNT(*) FROM markets WHERE outcome IS NOT NULL')}",
+              f"res={q('SELECT COUNT(*) FROM markets WHERE outcome IS NOT NULL')} "
+              f"eq=${st.equity:,.2f} used=${st.committed:,.2f}",
               flush=True)
 
 
@@ -949,6 +1036,20 @@ if __name__ == "__main__":
     p.add_argument("--bankroll", type=float, default=1000.0)
     p.add_argument("--kelly", type=float, default=0.25,
                    help="Kelly fraction for directional legs; 0 = flat max-usd")
+    p.add_argument("--min-ask", type=float, default=0.0,
+                   help="floor on the price paid; buying the favoured side is "
+                        "the strongest predictor that a hedge will appear")
+    p.add_argument("--max-depth", type=float, default=1e9,
+                   help="ceiling on size resting at the best ask; a thin quote "
+                        "is one about to move")
+    p.add_argument("--max-intensity", type=float, default=1e9,
+                   help="ceiling on relative traded notional; a busy tape means "
+                        "makers have already widened")
+    p.add_argument("--min-usd", type=float, default=1.0,
+                   help="stop opening once free capital falls below this")
+    p.add_argument("--adaptive-band", type=int, default=1,
+                   help="scale the required locked profit by the fee payable and "
+                        "how much of the outcome is still in doubt")
     p.add_argument("--er-min", type=float, default=0.0,
                    help="skip markets whose 30x1m efficiency ratio is below this "
                         "(0.0 = keep chop)")
