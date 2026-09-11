@@ -1463,3 +1463,72 @@ it does not show it beats the *quoted price*, and there is no history of hourly
 quotes to test that against. The 5-minute model also "beat the book" by a wide
 margin (0.4444 against 0.5215 in section 14) and that entire result turned out
 to be frozen quotes. The live hourly arm is the only thing that settles it.
+
+---
+
+## 32. Hourly quotes do not freeze the way 5-minute ones do
+
+The artifact that invalidated six findings was a book that stops updating. The
+first thing worth knowing about the hourly instrument is whether it has the same
+disease:
+
+| dataset | snapshots | change rate | median stale | stale > 20s |
+|---|---|---|---|---|
+| **hourly** | 3,035 | 10.8% | 2.1s | **5.9%** |
+| 5-minute (guarded arm) | 56,472 | 26.1% | 0.8s | 11.5% |
+| 5-minute (historical) | 171,918 | 24.1% | 1.1s | 19.5% |
+
+The hourly book changes *less often* and is *less stale* at the same time, which
+is not a contradiction: a one-hour contract's fair value moves far less per unit
+time than a five-minute one, so fewer updates are correct behaviour. What
+matters is the tail — **5.9% of hourly snapshots sit on a quote older than 20
+seconds, against 19.5% in the 5-minute history**, a third as much.
+
+By time remaining, hourly:
+
+| time left | samples | median stale | stale > 20s |
+|---|---|---|---|
+| 2400–3600s | 173 | 0.8s | **0.0%** |
+| 1200–2400s | 2,865 | 2.4s | 6.3% |
+
+One hour of data, so this is an indication rather than a measurement, but it
+points the same way as the liquidity ($25,765 quoted against a few hundred
+shares) and the same way as the exact strike. Every dimension that killed the
+5-minute case is better here.
+
+---
+
+## Where twelve hours of work ends up
+
+**The 5-minute markets: closed.** No tradeable edge at retail latency, by any of
+seven routes, and the apparent edges were a websocket that stops delivering.
+Both taking and making fail for the same underlying reason — the market is too
+thin to transact on.
+
+**The hourly markets: open, and untested.** They differ on every dimension that
+mattered:
+
+| | 5-minute | hourly |
+|---|---|---|
+| settlement source | Chainlink TWAP-60s (needs credentials) | Binance 1h candle (public) |
+| strike error | estimated, ~5.3 bps basis | **exact** |
+| model form | digital on an average | plain spot digital |
+| quoted liquidity | a few hundred shares | **$25,765** |
+| quotes stale > 20s | 19.5% | **5.9%** |
+| model vs settlement | never cleanly measured | **34.2% better than a coin, 498 outcomes** |
+
+What is still unknown is the only thing that decides it: **whether the model
+beats the quoted price.** The 5-minute model appeared to, by a wide margin, and
+that was the artifact. There is no history of hourly quotes, so the live arm is
+the only instrument that can answer it.
+
+The methodological residue is worth more than either result:
+
+- a single data source cannot audit itself — the REST book settled in twelve
+  minutes what four sections of analysis could not
+- any number the mechanism cannot physically produce is an instrument fault
+  until proven otherwise; that test caught the frozen books and three of the
+  four broken diagnostics
+- filtering the signal is not enough, the outcome variable has to be clean too
+- twelve subgroup tests produce two nominal hits at t > 2 by construction
+- verifying a sample of your patches is not verifying them
