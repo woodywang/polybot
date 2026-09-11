@@ -146,7 +146,33 @@ async def main(minutes=20, asset="btc"):
         if lag <= 20 or lag % 5 == 0:
             print(f"  {lag*BAR*1000:>5.0f}ms{c:>30.4f}")
     print(f"\n  peak correlation {best[1]:.4f} at lag {best[0]*1000:.0f}ms")
-    json.dump(dict(rows=rows, peak=best), open("latency.json", "w"))
+
+    # Section 86 argued the lag is the market's equilibrium reaction time, not a
+    # gap.  If that is right the book should react at least as fast to LARGE
+    # moves as to small ones -- more participants act, and act sooner.  If
+    # instead big moves take longer to absorb, the tail is where a gap would
+    # live, and section 81 already showed the tail is the only place the move
+    # clears a tick.
+    mag = sorted(abs(x) for x in db)
+    cut = mag[int(len(mag) * 0.9)]
+    big = [(i, x) for i, x in enumerate(db) if abs(x) >= cut]
+    sml = [(i, x) for i, x in enumerate(db) if abs(x) < cut]
+    print(f"\n  conditional on |binance move|, split at p90 = {cut*1e4:.2f} bps")
+    print(f"  {'lag':>7}{'top decile':>14}{'rest':>12}")
+    cond = {}
+    for lag in range(0, 21):
+        for lab, grp in (("big", big), ("small", sml)):
+            xs = [x for i, x in grp if i + lag < len(dp)]
+            ys = [dp[i + lag] for i, _ in grp if i + lag < len(dp)]
+            cond.setdefault(lab, []).append((lag * BAR, corr(xs, ys)))
+        if lag <= 10 or lag % 5 == 0:
+            print(f"  {lag*BAR*1000:>5.0f}ms{cond['big'][lag][1]:>14.4f}"
+                  f"{cond['small'][lag][1]:>12.4f}")
+    for lab in ("big", "small"):
+        pk = max(cond[lab], key=lambda r: r[1])
+        print(f"  peak ({lab:>5}): {pk[1]:.4f} at {pk[0]*1000:.0f}ms")
+    json.dump(dict(rows=rows, peak=best, cond=cond, cut=cut),
+              open("latency.json", "w"))
 
 
 if __name__ == "__main__":

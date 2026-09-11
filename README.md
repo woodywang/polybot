@@ -23,6 +23,32 @@ different reason.**
 | collect liquidity rewards | none exist | `clobRewards` is absent on crypto hourlies |
 | pick off stale quotes | **none exist** | max quote age 1.8s across 304 samples |
 | trade the momentum | **+0.4 bps** | real, and 1000x too small for the fee |
+| hour-to-hour reversal | priced | book opens at 0.5105 / 0.4812, not 0.50 |
+| cross-asset lead-lag | priced | slope 0.08, t = 0.26 |
+| beat the book on speed | ~302ms window | that is the competition's reaction time, not a gap |
+
+## Where the edge actually is, and why it is not here
+
+The book follows Binance with a measured lag. Corrected for this machine's own
+feed delays — verified two independent ways, agreeing to 0.6ms — it is **~302
+milliseconds**:
+
+```
+                      RTT/2     one-way from exchange timestamps
+binance              115.2ms          115.8ms
+polymarket            21.0ms           13.4ms
+```
+
+In the top decile of volatility 302ms is worth 2.17c a share, which is the only
+figure in this project within range of the real account's measured 1.64c gross.
+It is also the only region the harness could not examine: a 302ms window against
+a 250ms strategy loop and a staleness guard set at 20 seconds.
+
+**But 302ms is not a gap, it is an equilibrium.** The book moves at 302ms because
+that is when the fastest participants have finished trading. Arriving then is
+arriving as the opportunity closes — to profit you must beat the marginal
+participant who is already setting that number, and no measurement here can see
+them.
 
 ## The one clean piece of finance in it
 
