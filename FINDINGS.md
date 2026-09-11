@@ -4758,3 +4758,66 @@ So the differential is real in direction and roughly right in size, and the
 absolute numbers carry an unmeasurable offset. **The ETH replication running now
 tests whether the 200ms peak reappears at all**; if it does not, everything above
 is moot.
+
+---
+
+## 86. The clock-skew caveat is closed, and the 302ms is the competition, not the opportunity
+
+Section 85 corrected the book lag to ~302ms but could not rule out clock skew
+between Binance's and Polymarket's servers — a 100ms offset would move
+everything, and no single machine can measure another's clock.
+
+**Round-trip time can.** RTT is measured start-to-finish on one clock, so it
+contains no skew at all. If the one-way delays inferred from exchange timestamps
+are network latency, RTT/2 should reproduce them:
+
+```
+                RTT/2     clockcheck one-way
+binance        115.2ms         115.8ms
+polymarket      21.0ms          13.4ms
+gamma            7.4ms              --
+```
+
+**Binance agrees to 0.6 milliseconds.** Two completely independent methods — one
+differencing two venues' clocks, one using only this machine's — land on the same
+number. The delays are network latency and the correction in section 85 stands.
+
+(Polymarket's 21.0 vs 13.4 differs by 8ms, which is expected: RTT includes server
+processing on a REST endpoint, and the websocket path is not the REST path.)
+
+Incidentally this locates the machine: ~115ms from Binance, ~21ms from
+Polymarket's CLOB, ~7ms from its gamma API. It is sitting close to Polymarket
+and far from Binance — which is the wrong side for this trade, since the
+*signal* originates at Binance.
+
+### The reframing this forces
+
+With the caveat closed, the budget is:
+
+```
+book moves at                        +302 ms
+  I learn of the Binance move at     -116 ms
+  my order needs to reach the CLOB    -21 ms
+                                     -------
+  left for decision and signing       165 ms
+```
+
+165ms is not a hard barrier, and a participant near Binance would have ~197ms.
+Which raises the question that actually settles this: **if the bar is that low,
+why has the opportunity not been competed away?**
+
+It has. **The 302ms is not a gap waiting to be exploited — it is how long it
+takes the people already doing this to finish.** A book does not move at 302ms
+because nobody is watching; it moves at 302ms because that is when the fastest
+participants have done their trading and the quote has absorbed it. Arriving at
+302ms is arriving exactly as the opportunity closes.
+
+To profit you do not need to beat 302ms, you need to beat **the marginal
+participant who is already setting it** — and this measurement cannot see that
+person at all. What it can say is that the number is an equilibrium, not an
+inefficiency, which is the same conclusion sections 42, 65 and 80 reached about
+the price: **the book is not slow or wrong; it is the aggregate of people who
+have already done the work.**
+
+That is the honest end of the latency thread. The remaining check is whether the
+peak replicates on ETH at all.
