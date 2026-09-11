@@ -40,6 +40,9 @@ UA = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 WIN = 300                        # 5-minute markets
 HIST = 420                       # seconds of tape to keep
 TWAP_W = 60.0                    # chainlink twap-60s stream
+HOURLY_NAME = {"btc": "bitcoin", "eth": "ethereum", "sol": "solana",
+               "xrp": "xrp", "doge": "dogecoin", "bnb": "bnb"}
+ET_OFFSET = -4 * 3600          # EDT; the slug names the hour in Eastern time
 BN = {"btc": "btcusdt", "eth": "ethusdt", "sol": "solusdt",
       "xrp": "xrpusdt", "doge": "dogeusdt", "bnb": "bnbusdt"}
 CB = {"btc": "BTC-USD", "eth": "ETH-USD", "sol": "SOL-USD",
@@ -354,6 +357,35 @@ def regime_of(closes):
     return abs(closes[-1] - closes[0]) / path, path / closes[-1] * 1e4
 
 
+def hourly_slug(asset, start_utc):
+    """bitcoin-up-or-down-september-13-2026-3pm-et for the candle starting then."""
+    t = time.gmtime(start_utc + ET_OFFSET)
+    ampm = "am" if t.tm_hour < 12 else "pm"
+    h12 = t.tm_hour % 12 or 12
+    month = ("january february march april may june july august september "
+             "october november december").split()[t.tm_mon - 1]
+    return (f"{HOURLY_NAME[asset]}-up-or-down-{month}-{t.tm_mday}-"
+            f"{t.tm_year}-{h12}{ampm}-et")
+
+
+def kline_open(sym, start_utc):
+    """The exact open of the 1h candle beginning at start_utc.
+
+    Hourly markets settle on the Binance 1h candle -- close versus open -- so
+    unlike the 5-minute markets the strike is not estimated at all. The three
+    largest error sources there (a 5.3bps venue basis, the TWAP approximation,
+    and a strike reconstructed from a 60s integral) are all exactly zero here.
+    """
+    u = (f"https://api.binance.com/api/v3/klines?symbol={sym.upper()}"
+         f"&interval=1h&startTime={int(start_utc)*1000}&limit=1")
+    req = urllib.request.Request(u, headers=UA)
+    with urllib.request.urlopen(req, timeout=15) as r:
+        k = json.load(r)
+    if not k or int(k[0][0]) // 1000 != int(start_utc):
+        return None
+    return float(k[0][1])
+
+
 def _klines(sym, interval, limit):
     u = (f"https://api.binance.com/api/v3/klines?symbol={sym.upper()}"
          f"&interval={interval}&limit={limit}")
@@ -456,22 +488,36 @@ async def discover(st):
     """Slugs are deterministic: {asset}-updown-5m-{window_start}."""
     while True:
         now = time.time()
-        base = int(now // WIN) * WIN
-        slugs = [f"{a}-updown-5m-{base + k * WIN}"
-                 for a in st.cfg.assets for k in (0, 1, 2)]
+        win = st.cfg.window
+        base = int(now // win) * win
+        if st.cfg.hourly:
+            slugs = [hourly_slug(a, base + k * win)
+                     for a in st.cfg.assets for k in (0, 1)]
+        else:
+            slugs = [f"{a}-updown-5m-{base + k * win}"
+                     for a in st.cfg.assets for k in (0, 1, 2)]
         new = [s for s in slugs if s not in st.markets]
         for m in await asyncio.to_thread(gamma, new, False):
             slug = m["slug"]
             toks = json.loads(m["clobTokenIds"])
-            st.markets[slug] = dict(asset=slug.split("-")[0],
-                                    start=int(slug.split("-")[-1]),
+            if st.cfg.hourly:
+                # endDate is the candle's close; the candle opened an hour before
+                end = time.strptime(m["endDate"][:19], "%Y-%m-%dT%H:%M:%S")
+                start = int(time.mktime(end) - time.timezone) - st.cfg.window
+                asset = next((a for a in st.cfg.assets
+                              if slug.startswith(HOURLY_NAME[a] + "-")), None)
+                if asset is None:
+                    continue
+            else:
+                asset, start = slug.split("-")[0], int(slug.split("-")[-1])
+            st.markets[slug] = dict(asset=asset, start=start,
                                     up=toks[0], dn=toks[1], strike=None)
         live = {t for s, mk in st.markets.items() for t in (mk["up"], mk["dn"])
-                if mk["start"] + WIN > now - 30}
+                if mk["start"] + st.cfg.window > now - 30}
         if live != st.wanted:
             st.wanted, st.gen = live, st.gen + 1
         for slug in [s for s, mk in st.markets.items()
-                     if mk["start"] + WIN < now - 600]:
+                     if mk["start"] + st.cfg.window < now - 600]:
             del st.markets[slug]
         await asyncio.sleep(15)
 
@@ -480,7 +526,7 @@ async def resolve(st):
     while True:
         rows = st.db.execute(
             "SELECT slug, start_ts FROM markets WHERE outcome IS NULL").fetchall()
-        due = [s for s, t in rows if time.time() > t + WIN + 120]
+        due = [s for s, t in rows if time.time() > t + st.cfg.window + 120]
         got = 0
         # One slug per request: gamma silently returns [] when several slug
         # params are combined with closed=true, which reads as "nothing has
@@ -635,7 +681,21 @@ async def strategy(st):
             # Sampling spot here was wrong by a minute of drift, and because
             # the model's variance collapses as tau^3 that error came back as
             # confident, losing trades.
-            if mk["strike"] is None and mk["start"] <= now < mk["start"] + 2:
+            # Hourly markets settle on the Binance 1h candle, close versus open,
+            # so the strike is read exactly rather than reconstructed. The three
+            # largest error sources in the 5-minute case -- a 5.3bps venue
+            # basis, the TWAP approximation and a strike integrated from 60s of
+            # ticks -- are all identically zero here.
+            if st.cfg.hourly:
+                if mk["strike"] is None and now > mk["start"] + 2:
+                    op = kline_open(BN[mk["asset"]], mk["start"])
+                    if op:
+                        mk["strike"] = op
+                        st.db.execute(
+                            "INSERT OR REPLACE INTO markets VALUES(?,?,?,?,?,?,NULL)",
+                            (slug, mk["asset"], mk["start"], mk["up"], mk["dn"], op))
+                        st.db.commit()
+            elif mk["strike"] is None and mk["start"] <= now < mk["start"] + 2:
                 i0 = st.integral(mk["asset"], mk["start"] - TWAP_W, mk["start"])
                 if i0:
                     mk["strike"] = i0 / TWAP_W
@@ -653,8 +713,8 @@ async def strategy(st):
                                   (slug, mk["er1"], er5, rng, mk["path1"]))
                     st.db.commit()
 
-            k, tau = mk["strike"], mk["start"] + WIN - now
-            if k is None or not (0 < tau < WIN):
+            k, tau = mk["strike"], mk["start"] + st.cfg.window - now
+            if k is None or not (0 < tau < st.cfg.window):
                 continue
             spot = st.spot(mk["asset"])
             if spot is None:
@@ -670,7 +730,7 @@ async def strategy(st):
             scale = min(max(r_cnt ** 0.5, 0.6), 2.0) if st.cfg.vol_scale else 1.0
             sigma = sig_tr * scale
             w = st.cfg.twap_w
-            ik = st.integral(mk["asset"], mk["start"] + WIN - w, now) or 0.0 \
+            ik = st.integral(mk["asset"], mk["start"] + st.cfg.window - w, now) or 0.0 \
                 if tau < w else 0.0
             p_up = fair.fair_up(spot, k, tau, sigma, w, ik)
             naive = fair.fair_up_naive(spot, k, tau, sigma)
@@ -1097,6 +1157,10 @@ def report(a):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--assets", default="btc,eth,sol", type=lambda s: s.split(","))
+    p.add_argument("--hourly", type=int, default=0,
+                   help="trade the 1-hour markets instead of the 5-minute ones; "
+                        "they settle on the Binance 1h candle, so the strike is "
+                        "exact rather than estimated")
     p.add_argument("--twap-w", type=float, default=60.0)
     p.add_argument("--min-edge", type=float, default=0.01,
                    help="model edge per share, net of fee, to open a leg")
@@ -1175,6 +1239,7 @@ if __name__ == "__main__":
     p.add_argument("--db", default="paper3.db")
     p.add_argument("--report", action="store_true")
     a = p.parse_args()
+    a.window = 3600 if a.hourly else WIN
     if a.report:
         report(a)
     else:

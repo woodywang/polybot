@@ -1365,3 +1365,53 @@ artifact, a websocket that stops delivering. What caught it was not code review
 but the discipline of pulling raw rows behind any number too good for the
 mechanism to produce — and once a second data source was added, twelve minutes
 settled what four sections of analysis had not.
+
+---
+
+## 30. A route never tested: the hourly markets have an exact strike
+
+Everything above concerns the 5-minute markets, which settle on a Chainlink
+TWAP-60s stream that needs credentials this project does not have. The **hourly**
+markets settle on something else entirely:
+
+> "resolve to Up if the close price is greater than or equal to the open price
+> for the BTC/USDT 1 hour candle that begins on the time and date in the title"
+
+That is a Binance candle. It is directly readable from the public klines
+endpoint, which removes **all three** of the largest error sources at once:
+
+| error source (5-minute markets) | hourly markets |
+|---|---|
+| venue basis, mean \|5.3\| bps | **zero** — settlement *is* Binance |
+| TWAP-of-an-average approximation | **zero** — plain spot digital |
+| strike integrated from 60s of ticks | **zero** — the candle's open, read exactly |
+
+The model needs no change: with `--twap-w` near zero the TWAP digital's
+`sigma^2 (tau - 2w/3)` collapses to `sigma^2 tau`, which is the spot digital.
+
+Liquidity is a different world too. The current hour quoted $4,159 and the next
+$25,765, against best-ask depths of a few hundred shares in the 5-minute books —
+and it was thinness, not economics, that closed both the taking and the making
+case (sections 19 and 28).
+
+First live samples:
+
+```
+tau=2375  Up   ask=0.670  depth=177  fair=0.592  spot=77128.9  K=77054.0
+tau=2374  Down ask=0.350  depth= 71  fair=0.597
+```
+
+Spot is 97 bps above an exactly-known strike with 40 minutes to run.
+
+### Two patches that failed silently, again
+
+The hourly strike block was written with `str.replace`, reported success,
+matched nothing, and the arm ran for twenty minutes recording zero markets. Six
+other strings were grep-verified and this one was not — the identical failure
+recorded in section 4 as already learned. **Sampling the verification is not
+verifying it.** A second bug survived the same way: one `mk["start"] + WIN`
+left hard-coded against a 300s constant, which in hourly mode would have
+computed the averaging window an hour out of place.
+
+Both are now applied by `Edit` and every replacement checked, not a sample of
+them.
