@@ -1253,3 +1253,52 @@ The favourite still beats its own quote by **+3.1 pt** on live quotes, worth
 **+1.7¢ a share** after the real fee and the measured slippage, and it needs no
 VRP condition. That is the whole of the surviving edge, and at 125–137 markets
 it has not been tested for significance per market.
+
+---
+
+## 28. The maker case closes: the queue never reaches you
+
+Third version of the diagnostic, with the clock finally right — post at the
+prevailing best bid, hold a fixed 60 seconds, count every sell that trades at or
+below that price:
+
+```
+270 simulated posts, 60s each
+  queue ahead cleared within 60s     10  (3.7%)
+  size ahead at post                 median 105 sh
+  sell volume at that price in 60s   median 0 sh, mean 16 sh
+  sold / size-ahead                  median 0.00, p90 0.05
+```
+
+**More than half of all posts see zero volume at their price for a full
+minute.**
+
+### The arithmetic in section 24 was wrong
+
+That round estimated ~220 sell-shares per minute per token from 602 trades in
+55 seconds, and concluded a joiner should clear in 5–12 seconds. The error was
+counting *all* trades as if they hit the bid. A taker buying lifts the ask and
+does nothing for a resting bid, and the sells that do arrive are spread across
+price levels. The measured rate at a specific bid is **16 shares a minute, not
+220**.
+
+Which gives the number that closes this:
+
+```
+105 shares ahead / 16 shares per minute  ~=  6.6 minutes to clear
+```
+
+**The market only lives five minutes.** The queue does not reach you before the
+contract settles.
+
+### What that does to sections 14 and 21
+
+The per-share maker arithmetic there was right — half spread plus rebate minus
+adverse selection, roughly +0.45¢ to +0.75¢ against −2.25¢ for taking the same
+trade. It assumed a fill. At a 3.7% fill rate inside 60 seconds the expectation
+is **0.75¢ × 0.037 ≈ 0.03¢ a share**, before charging anything for the price
+having moved while you waited.
+
+Making does not work here for the same reason taking does not: not because the
+economics are wrong, but because the market is too thin to transact on at all.
+Every direction this project has explored now terminates in the same place.
