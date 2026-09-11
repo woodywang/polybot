@@ -119,8 +119,10 @@ refinement of the drawdown limit:
   against argparse's default and was wrong by 10x.
 - btc, eth and sol resolve the same window of the same risk asset. Cluster on
   the window, not the market, or t is inflated by sqrt(3).
-- Complementary arm pairs (`--fav-only 1` and `-1`) that **cannot both profit**,
-  so the ledger audits itself regardless of what the market does.
+- The identity check above is the real ledger audit. A complementary arm pair
+  (`--fav-only 1` and `-1`) is **not** one: the two rules name opposite sides at
+  any instant, but the favourite changes hands during a market, so both arms end
+  up holding both sides and their P&L carries no constraint (§72).
 - Every artifact found so far announced itself as an unusually favourable
   number. That remains the only reliable detector.
 

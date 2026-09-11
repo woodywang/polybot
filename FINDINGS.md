@@ -3896,3 +3896,65 @@ family, different subscription load. The drop rates are the measurement.
 That this was found by counting tokens rather than by profiling is the pattern of
 the whole day: **the expensive bugs were all visible in the configuration, and
 none of them were visible in the results they were corrupting.**
+
+---
+
+## 72. Review: the complementary-pair "instrument check" does not hold
+
+### (1) Health
+
+Five arms, no crashes, no exceptions, ledger identity `$0.0000` on every arm
+with settlements. Drops: `paper_fav5` 1 in 9 minutes (0.111/min) at
+`--windows 2`, `paper_dog5` 4 in 40 minutes (0.100/min) at `--windows 3`. **No
+difference yet** — 9 minutes is far too short for that A/B and the rates are
+indistinguishable.
+
+### (2) Every arm, from `--report`
+
+```
+arm               mkts    stake      NET      pct    maxDD    final
+paper_fav5          12   113.36   -23.58  -20.80%   32.3%    76.42
+paper_dog5          14   126.84   +32.17  +25.36%   16.0%   132.17
+maker_front          1    13.00    -7.92  -60.89%    7.9%    92.08
+stale5              11    85.82    -1.88   -2.19%   35.3%    98.12
+paper_fav5_nocap    39   627.72   -25.53   -4.07%   29.4%    74.47
+paper_dog5_nocap    21   304.97   -43.84  -14.37%   59.4%    56.16
+```
+
+### (3) What was overturned: a safety property I had been asserting
+
+Sections 43, 50 and 66, and the README, all claim the `--fav-only 1` / `-1` pair
+"cannot both profit", and present that as a ledger audit that holds regardless
+of what the market does. **It does not hold.**
+
+```
+markets traded:  fav 15   dog 17   shared 15
+of the shared:   took the SAME side in 8, strictly opposite in 7
+```
+
+The reasoning was that at any instant the dearer and cheaper sides are opposite,
+so the two arms take opposite positions. That is true **per quote** and false
+**per market**: the favourite changes hands as the price moves, so an arm buying
+"the dearer side" buys Up at 21:30 and Down at 21:40. Over a market's life both
+arms accumulate both sides, and their P&L carries no constraint at all.
+
+This round they came in at -20.80% and +25.36%. I would have read that as the
+check passing. It is not a check — it is two loosely-related directional bets
+that happened to land on opposite signs.
+
+**What remains true** is the per-quote version: at a single instant the two rules
+name opposite sides. That is a statement about the rules, not an audit of the
+ledger, and it should never have been promoted to one. The genuine ledger audit
+in this project is the identity check in `report()` — pairs + residue must
+reproduce opens + hedges, because every share settles at 0 or 1. That one is
+arithmetic and it has caught a real $46 error.
+
+### (4) Samples
+
+`paper_fav5` 12 markets, `paper_dog5` 14, `maker_front` **1**, `stale5` 11,
+`maker_wide` 0. **No conclusion from any of them.** `maker_front` at -60.89% is
+one market — three legs of one hour of one asset.
+
+The only thing this round produced is the retraction above, and it came from
+auditing a claim rather than from the P&L table. That is the third time today
+that checking a *stated* property has been worth more than reading a result.
