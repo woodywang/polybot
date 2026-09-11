@@ -1847,3 +1847,48 @@ arms with the most negative t, and the breaker took exactly them while leaving
 
 **Sample still insufficient under correction. No parameters changed.** The
 hourly arm's first markets settle shortly.
+
+---
+
+## 39. The contradiction resolves: both measurements were right about different things
+
+Section 38 recorded a gap it could not explain — the spot rule measured offline
+gave +0.68¢ at t = 0.27 (no edge) while the live arm running it reports +14.26%
+per market. `--report` splits the arm's P&L and the answer is immediate:
+
+```
+paper100_spot, 63 markets
+  hedged pairs    609.0 sh   cost $513.24  payout $608.97   P&L  +$95.73
+                  cost per $1 pair = $0.8428
+  naked residue    47 legs   cost $238.03  payout $243.35   P&L   +$5.32   win 22/47
+  TOTAL                                                            +$101.05  (+13.45%)
+```
+
+**Ninety-five percent of the profit is the hedged pairs. The naked residue — the
+part that *is* the pure directional bet — won 47% and made $5.32**, which is the
+offline finding exactly. Both measurements were correct; the offline test scored
+direction and the arm earns from hedging. They were never measuring the same
+thing, and section 38 compared them as if they were.
+
+The same split holds in the other two arms:
+
+| arm | hedged pairs | naked residue | naked win rate |
+|---|---|---|---|
+| `spot` | **+$95.73** | +$5.32 | 22/47 (47%) |
+| `fav` | **+$68.29** | −$26.92 | 15/30 (50%) |
+| `filt` | **+$53.72** | −$24.00 | 18/31 (58%) |
+
+Pairs profitable in all three, directional residue around zero or negative in
+all three.
+
+### What still has to hold for this to be real
+
+Section 5 established that the sequential lock is **not** arbitrage — it is the
+winning branch of a directional bet, with the losing branch appearing as naked
+residue. It pays here only because the residue is roughly break-even (+$5.32)
+rather than deeply negative. If that balance is a property of 63 markets rather
+than of the instrument, the pairs' $0.8428 per dollar goes with it.
+
+That is the thing to watch, and it is not yet answerable: `spot` has 63 markets
+against the ~45 its own variance demands for t = 2, but under the six-arm
+Bonferroni threshold of |t| > 2.64 it remains unproven at 2.35.
