@@ -376,3 +376,46 @@ of even money from spot, so the bisection ran out and returned 10000.
 `implied_sigma` now verifies its own answer and returns None instead. That
 disagreement is itself information — the book and the model differ on which
 side is favoured — but it is not a volatility. Convergence is 90.8%.
+
+---
+
+## 10. The anomaly has a name: favourite-longshot bias
+
+Comparing the favoured side's realised win rate against the probability its own
+quote implies, across 1,762 observations:
+
+| time left | obs | favourite wins | its quote implies | excess |
+|---|---|---|---|---|
+| 240–300s | 435 | 69.2% | 62.3% | **+6.9 pt** |
+| 180–240s | 419 | 83.1% | 68.1% | **+15.0 pt** |
+| 120–180s | 412 | 83.0% | 74.3% | **+8.7 pt** |
+| 60–120s | 355 | 87.3% | 79.3% | **+8.0 pt** |
+| 30–60s | 122 | 92.6% | 78.8% | **+13.8 pt** |
+
+The favourite beats its own price at **every** horizon. This is the
+favourite-longshot bias, among the best documented anomalies in betting and
+prediction markets: longshots are overbought, favourites are underbought.
+
+Two things make this an understatement rather than an overstatement. The
+implied column uses the **ask**, which sits above fair value, so the true gap is
+wider. Against that, observations inside one market share its outcome, so the
+effective sample is the ~81 markets, not the 1,762 rows.
+
+### The VRP measure locates where the bias is largest
+
+| VRP tercile | obs | favourite wins | implied | excess |
+|---|---|---|---|---|
+| low (implied ≈ realised) | 587 | 82.8% | 74.1% | +8.7 pt |
+| middle | 588 | 78.1% | 76.6% | +1.5 pt |
+| **high (implied ≫ realised)** | 587 | 82.8% | 62.6% | **+20.2 pt** |
+
+Everything found so far is one anomaly seen from three sides: longshots under
+$0.20 settling worthless, favourites carrying positive excess, and the VRP
+ratio marking when the gap more than doubles. The arm the evidence points at is
+favourites **and** rich implied vol together, which is now running.
+
+### Inconclusive, recorded so it is not re-run as if new
+
+When the book and the model disagree about which side is favoured, spot's
+direction was right 58.3% (n=12) and 56.2% (n=16). At those sizes a coin lands
+that far off routinely. Nothing is built on it.
