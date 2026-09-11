@@ -994,3 +994,53 @@ which is precisely when the price is about to go through it.
 nothing in this data measures it.** The +0.45¢ to +0.75¢ has to be discounted by
 an unknown factor, and testing it needs a different harness: signed limit orders
 resting in a real book, which this one has never sent.
+
+---
+
+## 22. Four arms were still running without the stale guard
+
+The guard added in section 18 was applied to one arm. The other four $100 arms
+and both long-running arms kept trading frozen quotes for six more hours, and
+their equity said exactly what a contaminated run says:
+
+| arm (no guard) | markets | equity |
+|---|---|---|
+| base — no filters | 22 | **$142.85** |
+| fav — ask ≥ 0.50 | 22 | $110.51 |
+| vrp — implied/realised ≥ 1.5 | 22 | $113.50 |
+| filt — both | 22 | $106.60 |
+
+**The more the arm filtered, the less it "earned"** — because the filters were
+already screening out some of the stale-quote trades that carried the artifact.
+That is a third, independent confirmation of section 19, arriving by accident.
+
+All four are archived as `contaminated_*.db` and restarted with `--max-stale 20`.
+`paper_lock` and `paper_dir` keep running unguarded on purpose: they are the
+historical dataset the staleness analysis was built on.
+
+### First clean result, and it is "unknown" rather than "yes"
+
+`paper100_spot`, the one arm that had the guard:
+
+```
+11 markets   stake $95.68   NET +$23.21   (+24.26%)
+direction right 33/45 legs (73.3%)
+per-market return: mean +24.52%, stdev 91.94%, se 27.72%
+t = 0.88 -- not significant
+markets needed for t = 2: about 56
+```
+
++24% on eleven markets with a 92% per-market standard deviation says nothing.
+It neither confirms nor refutes section 19; it is simply too small. Roughly five
+more hours of collection reaches the sample where the question can be answered.
+
+### A measurement refused
+
+Queue dynamics were estimated from `obs` as a stand-in while the proper
+diagnostic ran: 89.2% of adjacent samples showed the price had moved. **That
+number does not measure what it looks like it measures** — `obs` samples every
+20 seconds and books change on a sub-second scale, so of course the price moved.
+It supports only the weaker claim that **a resting order at the best quote is
+behind the market within 20 seconds about 89% of the time**, which is a warning
+for the maker case but not the queue-clearing rate. That needs the 250 ms book
+stream, which `queuecheck.py` collects.
