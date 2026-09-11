@@ -710,3 +710,50 @@ taking moves nothing.
 What the measurement does support, and all it supports: **at $3 a fill the
 strategy is nowhere near depth-constrained** (about 15% of median best-ask
 size). Capacity beyond a few hundred dollars per market is unmeasured.
+
+---
+
+## 17. Refining the rule — and what a 100% win rate actually means
+
+Last 60 seconds, split by how far spot sits from the strike:
+
+| \|S−K\| | legs | markets | win | avg price | net/share | t |
+|---|---|---|---|---|---|---|
+| 0–2 bps | 49 | 19 | 73.5% | 0.693 | +4.06¢ | 0.47 |
+| 2–5 bps | 48 | 23 | 95.8% | 0.843 | +10.63¢ | 4.28 |
+| 5–10 bps | 36 | 22 | 100% | 0.836 | +11.85¢ | 3.52 |
+| 10–20 bps | 44 | 14 | 100% | 0.680 | +21.13¢ | 3.32 |
+| 20+ bps | 51 | 13 | 100% | 0.566 | +33.57¢ | 5.26 |
+
+Under 2 bps the comparison is noise — 73.5% and t = 0.47. Everything the rule
+earns comes from being decisively on one side.
+
+By price paid, same window:
+
+| ask | legs | win | net/share | on stake |
+|---|---|---|---|---|
+| 0.50–0.70 | 98 | 92.9% | +29.45¢ | **+55.7%** |
+| 0.70–0.85 | 22 | 90.9% | +13.39¢ | +17.2% |
+| 0.85–0.95 | 32 | 93.8% | +5.89¢ | +6.6% |
+| 0.95–1.00 | 62 | 100% | +1.83¢ | +1.9% |
+
+Combined (gap ≥ 5 bps, price ≤ 0.95): 93 legs, 23 markets, +33.55¢, t = 8.47.
+
+### Why the 100% is not a guarantee, and why it is dangerous
+
+A 100% leg-level rate here means **23 of 23 markets won**, since legs inside a
+window share an outcome. At a 93% base rate, 23 straight is p ≈ 0.19 — ordinary.
+
+Mechanically it must break. 5 bps on BTC at $77k is **$3.85**, while a
+60-second move at the measured sigma is around **$23**. The gap does not lock
+anything; the run of wins is luck riding a genuine but partial edge.
+
+The real hazard is in the statistic: **a rule with no observed losses has an
+unmeasured loss distribution.** t = 8.47 is high *because* the per-market
+variance estimate is near zero, not because the edge is certain. Sizing off it
+would be the same error as Kelly off an insignificant mean (section 11), except
+worse — there the variance was merely large, here it is unestimated. The first
+loss will move that t a long way.
+
+Two arms now run the rule, one plain and one with `--min-gap-bps 5
+--max-price 0.95`, so the refinement earns its place or does not.

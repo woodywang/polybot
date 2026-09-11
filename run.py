@@ -749,7 +749,18 @@ async def strategy(st):
                 # filtering on edge discards the good trades along with the
                 # bad. Kept as a mode so the two run head to head.
                 if st.cfg.spot_rule:
-                    ed = 0.02 if side == ("Up" if spot > k else "Down") else -1.0
+                    # Distance matters as much as direction. Under 2bps from the
+                    # strike the rule is noise (73.5% win, t 0.47); past 5bps it
+                    # has not lost yet across 23 markets. "Has not lost yet" is
+                    # the point: a rule with no observed losses has an
+                    # UNMEASURED loss distribution, and its t is high precisely
+                    # because the variance estimate is zero rather than small.
+                    # Mechanically it must break -- 5bps on BTC is $3.85 while a
+                    # 60-second move is around $23 -- so this is sized as a thin
+                    # edge, not a certainty.
+                    gap = abs(spot - k) / max(k, 1e-9) * 1e4
+                    ok = gap >= st.cfg.min_gap_bps
+                    ed = 0.02 if (ok and side == ("Up" if spot > k else "Down")) else -1.0
                 # Variance risk premium gate. Measured on 156 settled markets
                 # and replicated independently in both arms (r -0.28 / -0.38,
                 # both past their own 95% band): the trade pays when the book
@@ -1086,6 +1097,9 @@ if __name__ == "__main__":
     p.add_argument("--bankroll", type=float, default=1000.0)
     p.add_argument("--kelly", type=float, default=0.25,
                    help="Kelly fraction for directional legs; 0 = flat max-usd")
+    p.add_argument("--min-gap-bps", type=float, default=0.0,
+                   help="minimum |spot - strike| in bps for the spot rule; "
+                        "under 2bps the comparison is noise")
     p.add_argument("--spot-rule", type=int, default=0,
                    help="ignore the model's fair value and buy whichever side "
                         "spot sits on relative to the strike")
