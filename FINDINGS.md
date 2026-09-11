@@ -4251,3 +4251,59 @@ re-taken on an instrument that works.**
 168. **Nothing is concludable this round**, and the next several rounds will
 also conclude nothing, because the only remaining measurement needs roughly a
 day of collection to be comparable.
+
+---
+
+## 78. The account's price band is what a latency taker's would be
+
+Section 54 inferred from the account's fee rate — 1.16c a share, and
+`fee = 0.07 p (1-p)` — that it trades at **p ~ 0.79 or 0.21**, not at the money.
+That was recorded as a curiosity. It is a prediction of the one hypothesis still
+standing.
+
+A latency taker buys when a spot move has not yet reached the book. The edge is
+the probability change the book has not applied, proportional to
+`phi(z) / sigma`; the cost is the fee. Edge per unit of fee, by price:
+
+```
+    p       z   phi(z)  fee/share   edge per unit fee
+ 0.50   -0.00   0.3989    0.01750           22.8
+ 0.60    0.25   0.3863    0.01680           23.0
+ 0.70    0.52   0.3477    0.01470           23.7
+ 0.79    0.81   0.2882    0.01161           24.8
+ 0.85    1.04   0.2332    0.00893           26.1
+ 0.90    1.28   0.1755    0.00630           27.9
+ 0.95    1.64   0.1031    0.00333           31.0
+ 0.98    2.05   0.0484    0.00137           35.3
+```
+
+The raw edge is largest at the money — `phi(z)` peaks there — but the fee falls
+faster than the edge does, because `7% x (1-p)` of stake collapses toward zero
+while `phi(z)` only halves by p = 0.90. **Latency trading is most fee-efficient
+at extreme prices**, and monotonically so.
+
+So the hypothesis makes a joint prediction: a latency taker on this venue should
+(a) trade away from the money, and (b) show a fee rate well below the 1.75c a
+share that at-the-money trading costs. The account does both — 1.16c, implying
+0.79.
+
+### Why this is weak evidence and worth stating anyway
+
+It is a consistency check, not a test. Plenty of other rules also live away from
+the money, and 0.79 is an *average* over an unknown mixture of prices. What
+makes it worth recording is that it was **not** constructed to fit: section 54
+computed 0.79 from the fee rate while trying to rule stale quotes in, long
+before latency was the last hypothesis standing, and the edge-per-fee curve
+comes from the fee formula and the normal density with nothing fitted.
+
+Two independent facts pointing the same way is not proof. It is the reason to
+spend the next measurement on latency rather than on anything else, which is
+what `latency.py` is doing — cross-correlating Binance mid returns against
+Polymarket mid returns at 100ms resolution to find the lag that maximises
+correlation.
+
+**If the book's reaction time is tens of milliseconds, the hypothesis dies with
+the others and the account is simply doing something invisible from here. If it
+is hundreds of milliseconds or more, there is a taker edge that every instrument
+in this project was built too slow to see** — `--max-stale` operates at 20
+seconds, four orders of magnitude above where this would live.
