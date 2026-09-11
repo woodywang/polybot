@@ -2169,6 +2169,10 @@ that out from a rule that cannot be true than from a number I want to believe.
 
 ## 44. Five-minute crypto has real momentum — measured with no volatility estimate
 
+> **Band labels corrected in section 49.** The `by_price` table's buckets
+> are 10¢ wide, not 5¢; every row label was off. The sigma-free persistence
+> result is unaffected.
+
 > **Partly retracted — see section 45.** The momentum result stands; the
 > claim that it "cross-validates" section 43 does not. The 30-day test scores
 > the book against the *random walk*, section 43 scored it against the *book's
@@ -2267,6 +2271,11 @@ maker question rather than a taker one.
 ---
 
 ## 45. The book prices the momentum. There is no taker edge.
+
+> **Refined by section 49.** Same labelling bug. "No taker edge" stands
+> (pooled t = 0.34). "The book prices the momentum" is too strong: corrected,
+> the 5-minute book still leans +2.4pp and the hourly book +4.3pp at t = 3.89.
+> The book carries *most* of it; the fee kills what is left.
 
 Section 44 ended with the right question: momentum in the price path is only
 worth money if the **book** misses it. `pairs` quotes both sides at one instant,
@@ -2429,6 +2438,10 @@ thesis, and adverse selection is the only thing that can take it away.
 
 ## 48. The hourly book's mid is biased, the fee eats it, and a maker would keep it
 
+> **Numbers superseded by section 49** — same labelling bug, and the
+> "pre-specified 0.55-0.65 band" actually pooled 0.60-0.80. Corrected, every
+> figure in this section gets *stronger*, not weaker.
+
 `histtest22.json` holds 93,016 quotes across 1,581 hourly markets over 22 days —
 **527 independent hours**, against the 67 windows every live conclusion so far
 has rested on. Section 44 predicted, from 30 days of klines and before this file
@@ -2489,3 +2502,80 @@ Erasing 4.4¢ needs fills concentrated near the p90 of a full minute's movement.
 Not impossible — that is what informed flow does — but it is a large ask, and
 `makercheck.py` has been measuring the actual markout on live hourly books for
 the last hour rather than arguing about it.
+
+---
+
+## 49. A bucket-width bug, and the corrected result is stronger
+
+`int((p - 0.5) * 10)` makes buckets **10¢ wide**. I labelled them 5¢ wide, in
+three files, so every band in sections 44, 45 and 48 named the wrong prices: the
+row printed as "0.55-0.60" held 0.60-0.70, and section 48's "pre-specified
+0.55-0.65 band" actually pooled 0.60-0.80. The arithmetic was right throughout;
+the labels were not, which is worse than a wrong number because it reads as
+confirmation of a prediction it never tested.
+
+Fixed to integer cents — `int(round((p - 0.5) * 100)) // 5` — because prices sit
+on a 1¢ grid and `(0.60 - 0.5) * 20` evaluates to 1.9999999999999996, which put
+exactly 0.60 one bucket low.
+
+### All three datasets now agree, and they are independent
+
+`too timid` — how far the favourite's win rate exceeds its own price:
+
+```
+price        30d klines (5m)   22d hourly book   live 5m book
+             8.5k windows       527 hours         68 windows
+0.50-0.55      +0.0060           +0.0188           +0.0374
+0.55-0.60      +0.0450           +0.0377           +0.0550
+0.60-0.65      +0.0491           +0.0492           +0.0337
+0.65-0.70      +0.0457           +0.0465           +0.0292
+0.70+          +0.0071           -0.0114           +0.0004
+```
+
+A plateau of roughly +4.5 points across 0.55-0.70, flat outside it, in three
+samples that share no data: 1-minute candles with no book at all, 22 days of
+hourly book quotes, and 5 hours of live 5-minute quotes. The klines and the
+hourly book match to within 1.5 points in every band.
+
+### The corrected hourly result
+
+```
+price             obs  hours   vs mid      t    taker      t    maker      t
+0.50-0.55      13,485    525  +0.0188  +2.19  -0.0086  -1.01  +0.0288  +3.36
+0.55-0.60      12,090    515  +0.0377  +3.43  +0.0107  +0.97  +0.0477  +4.34
+0.60-0.65       7,906    512  +0.0492  +3.80  +0.0229  +1.77  +0.0592  +4.57
+0.65-0.70       9,196    511  +0.0465  +3.58  +0.0212  +1.63  +0.0565  +4.34
+0.70+          50,339    518  -0.0114  -1.33  -0.0283  -3.30  -0.0014  -0.16
+
+0.55-0.65 pooled, 517 hours:
+  vs mid   +0.0430   t = +3.89
+  taker    +0.0163   t = +1.47
+  maker    +0.0530   t = +4.79
+```
+
+Every figure moved up: the bias is +4.30 points rather than +3.39, and the maker
+number is +5.30¢ a share at t = 4.79 rather than +4.39¢ at t = 3.79.
+
+### It is stable where it should be
+
+```
+by asset (0.55-0.65)      hours   vs mid      t    maker      t
+  btc                       512  +0.0513   +3.61  +0.0613  +4.32
+  eth                       510  +0.0534   +3.81  +0.0634  +4.52
+  sol                       513  +0.0725   +5.33  +0.0825  +6.07
+
+by day: 21 of 23 days positive
+```
+
+Three assets independently, and 21 of 23 days. Not one or two days carrying a
+t-statistic.
+
+### What stands
+
+- Taking is still dead: +1.63¢ at t = 1.47 in the best band, and
+  **significantly negative** at 0.70+ (t = −3.30).
+- The book carries most of the persistence but not all of it — section 45's
+  "the book prices the momentum" was too strong.
+- A maker in the 0.55-0.65 band would keep +5.30¢ a share, t = 4.79, **if fills
+  are independent of what happens next**. That assumption is still the whole
+  question and `makercheck.py` is still the thing that answers it.

@@ -134,7 +134,7 @@ def by_price(all_w):
             fav_up = p_up >= 0.5
             p = p_up if fav_up else 1.0 - p_up
             y = 1.0 if ((c > o) == fav_up) else 0.0
-            b = min(int((p - 0.5) * 10), 4)        # 5c bands from 0.50
+            b = min(int(round((p - 0.5) * 100)) // 5, 4)   # 5c bands
             m = cell.setdefault(b, {}).setdefault(t0, [0, 0.0, 0.0])
             m[0] += 1
             m[1] += y - p

@@ -103,7 +103,7 @@ def analyse(path="histtest22.json"):
         # the favourite and what it costs to take it
         p = m if m >= 0.5 else 1.0 - m
         w = y if m >= 0.5 else 1.0 - y
-        k = min(int((p - 0.5) * 10), 4)
+        k = min(int(round((p - 0.5) * 100)) // 5, 4)   # 5c bands
         # `mkt` is prices-history, which is a MID: checked directly by pulling
         # both tokens of one market and summing them -- median exactly 1.0000
         # over the paired timestamps, where two asks would sum to about 1.02.

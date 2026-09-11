@@ -1254,7 +1254,7 @@ def report(a):
         side = "Up" if m_up >= 0.5 else "Down"
         mid = m_up if side == "Up" else 1.0 - m_up
         ask = au if side == "Up" else ad
-        b = min(int((mid - 0.5) * 10), 4)
+        b = min(int(round((mid - 0.5) * 100)) // 5, 4)   # 5c bands
         e = fb.setdefault(b, {}).setdefault(starts.get(slug, slug), [0, 0.0, 0.0, 0.0])
         y = 1.0 if res[slug] == side else 0.0
         e[0] += 1
