@@ -3394,3 +3394,50 @@ code — it was found by asking why the hourly arms had **zero** disconnects whi
 the 5-minute arms had hundreds, and then measuring the difference: 19x the
 frames, 20x the bytes. **The asymmetry was the clue, and it was in the logs from
 the beginning.**
+
+---
+
+## 63. The tick grid makes passive making impossible, which is stronger than section 57
+
+Section 57 argued making was closed by a dilemma: behind the queue you fill only
+on sweeps (-15c markout), and the escape — improving the bid a tick for queue
+priority — "hands over the entire gross edge", leaving edge 0. The live arms say
+the second horn is worse than that.
+
+`maker_front` runs `--maker-improve 1`. Its fills, with `spread-capture` being
+`mid - fill price`:
+
+```
+21:31:00  5pm-et  Up    px 0.56  sz 5.4  fee 0  spread-capture -0.0050
+21:31:31  5pm-et  Up    px 0.56  sz 5.4  fee 0  spread-capture -0.0050
+21:40:50  5pm-et  Up    px 0.62  sz 4.8  fee 0  spread-capture -0.0050
+21:40:55  5pm-et  Up    px 0.56  sz 1.8  fee 0  spread-capture -0.0050
+21:47:59  5pm-et  Down  px 0.59  sz 5.1  fee 0  spread-capture -0.0050
+```
+
+**Every capture is negative.** The spread is 1c and the tick is 1c, so the best
+bid sits half a cent below the mid and improving it by one tick lands half a
+cent *above*. There is no "post at the mid" option — **the grid does not contain
+it.** A front-of-queue maker is not forgoing the spread, it is paying half of
+one.
+
+Meanwhile `maker_fav`, resting at the touch, has **0 fills** where
+`maker_front` has 5 and `maker_dog` 1. Queue position determines fill rate
+completely, exactly as section 57 said — but the price of leaving the back of
+the queue is not zero, it is -0.5c.
+
+So the dilemma is tighter than it looked:
+
+| position | fills | economics |
+|---|---|---|
+| at the touch | essentially none | +1.0c if it ever filled, -15c markout when it does |
+| one tick up | readily | **-0.5c before anything else happens** |
+
+Against a book whose mid is biased by +0.39c (section 51, weighted the way a
+trader is actually exposed), paying 0.5c above it is a loss on arrival. **Making
+is not marginal here, it is arithmetically closed by the tick size.**
+
+This is why the instrument matters more than the strategy: a 1c tick on a 1c
+spread leaves no passive price that is both fillable and profitable. It would
+take either a finer tick or a wider spread, and section 46 measured the hourly
+spread at exactly 2c two-sided — one tick each side.
