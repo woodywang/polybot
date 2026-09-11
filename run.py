@@ -472,7 +472,15 @@ async def feed_books(st):
             await asyncio.sleep(1)
             continue
         try:
-            async with websockets.connect(POLY_WS, ping_interval=None) as ws:
+            # max_queue=None: the 5-minute books push 867 frames/s and 570 KB/s
+            # across 18 tokens -- 19x the hourly markets -- and the library's
+            # default 32-frame queue applies backpressure long before the
+            # consumer is done, so the server's send buffer fills and it closes
+            # us with 1013 "slow consumer".  That happened 309 times across the
+            # fleet and is the most likely source of the websocket book
+            # disagreeing with the REST book by 14c in section 54.
+            async with websockets.connect(POLY_WS, ping_interval=None,
+                                          max_queue=None) as ws:
                 await ws.send(json.dumps({"assets_ids": toks, "type": "market"}))
                 print(f"[poly] subscribed {len(toks)} tokens", flush=True)
 

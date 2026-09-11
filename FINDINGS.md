@@ -2946,6 +2946,10 @@ fill rate that decides whether the markout is even worth reading.
 
 ## 56. Review: the harness was corrupting its own data, and `--report` was broken
 
+> **Diagnosis corrected in section 60.** The drops are per-process capacity,
+> not contention between collectors. Two arms alone drop at a higher rate than
+> thirteen did.
+
 Routine review, and two of the three things it found were faults in the
 instrument rather than results from it.
 
@@ -3214,3 +3218,63 @@ rules limit the loss per position, drawdown limits react to losses already
 taken, and **neither one caps how much of the account is exposed at once.** That
 needed its own control, and its absence is why a limit set at 50% could have
 returned zero.
+
+---
+
+## 60. The 5-minute book pushes 19x the traffic, and that is the whole story
+
+Section 56 blamed the 309 slow-consumer disconnects on thirteen collectors
+contending for one machine. That was wrong, and the correction came free: after
+cleaning down to two 5-minute arms, they dropped **twice each in eight minutes**
+— a *higher* rate than the fleet of thirteen. Contention was never the variable.
+
+Measuring what each subscriber actually has to absorb:
+
+```
+5-minute: 18 tokens →  867.5 frames/s   570.4 KB/s   1,683 level-updates/s
+hourly:   12 tokens →   46.5 frames/s    28.6 KB/s      92.9 level-updates/s
+```
+
+**Nineteen times the frames, twenty times the bytes.** 867 frames per second is
+867 `json.loads` calls plus 1,683 dictionary updates, in Python, in the same
+event loop as a strategy pass every 250ms. The hourly arms have never dropped
+once; the 5-minute arms dropped 74, 75, 58, 45 and 37 times. The instrument was
+never overloaded by *how many* arms ran — a single 5-minute arm is already past
+what one event loop absorbs comfortably.
+
+### The fix, and why it is the right one
+
+`websockets.connect` defaults to `max_queue=32`. When the consumer falls behind,
+the client stops draining the TCP socket, the **server's** send buffer fills, and
+Polymarket closes the connection with `1013 slow consumer`. Setting
+`max_queue=None` lets the client keep draining into memory and absorb bursts
+instead of pushing backpressure onto the server.
+
+Applied. Two minutes later both arms show zero drops against a prior rate of
+0.25/min — **which predicts only ~0.5 drops in that window, so this is not yet
+evidence.** Recorded as a pending measurement, not a result.
+
+### What it costs the earlier work
+
+Every live 5-minute measurement in this project was taken through a feed that
+drops under its own load, roughly once every five minutes on the long-running
+arms. Each drop is followed by a resubscribe that misses whatever changed in
+between — which is precisely how the websocket book came to disagree with the
+CLOB REST book by 14¢ in section 54, and why "frozen quotes" appeared to exist.
+
+The scoping this forces is worth stating plainly:
+
+| measurement | feed | trustworthy? |
+|---|---|---|
+| §48/49 hourly calibration, 527 hours | CLOB REST history | **yes** — no websocket involved |
+| §57 maker markout | hourly websocket | **yes** — hourly has never dropped |
+| §46 hourly spread and mid travel | hourly websocket | **yes** |
+| §42 5-minute book calibration | 5-minute websocket | **degraded** |
+| §54 stale-quote rates | 5-minute websocket | **measures my own drops** |
+
+The hourly results — which is where every surviving conclusion lives — are
+clean. The 5-minute live results are contaminated to the extent the drops
+matter, and their errors are large (14¢) and biased toward looking favourable.
+That the two instruments disagree about staleness is not a mystery any more;
+**one of them was being disconnected nineteen times more often because it was
+being asked to absorb nineteen times more data.**
