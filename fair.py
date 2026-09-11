@@ -129,7 +129,16 @@ def implied_sigma(p_mkt, spot, strike, tau, w=TWAP_W, i_known=0.0,
             lo = mid
         else:
             hi = mid
-    return (lo + hi) / 2
+    sig = (lo + hi) / 2
+    # Verify rather than trust the bisection. No sigma reprices a quote that
+    # sits on the opposite side of 0.5 from where spot sits: the model cannot
+    # put Up below even money while spot is above the strike, whatever the
+    # vol. Those runs walk to a bound and returning it silently reports a
+    # 10000-vol market. That disagreement is information -- the book and the
+    # model differ on which side is favoured -- but it is not a volatility.
+    if abs(fair_up(spot, strike, tau, sig, w, i_known) - p_mkt) > 1e-4:
+        return None
+    return sig
 
 
 def hedge_band(price, p_fair, k=2.5, floor=0.004, cap=0.10):
@@ -273,6 +282,10 @@ def _demo():
     # a richer quote than the model implies a HIGHER vol above the strike
     hi_q = implied_sigma(p + 0.05, S + 40, K2, tau2)
     assert hi_q < sig2, (hi_q, sig2)     # richer Up => less vol needed
+
+    # a quote on the wrong side of even money is unreachable, not high vol
+    assert implied_sigma(0.40, S + 40, K2, tau2) is None
+    assert implied_sigma(0.60, S - 40, K2, tau2) is None
 
     # gamma is largest near the strike and grows as expiry approaches
     g_atm = abs(digital_gamma(S + 1, K2, 60, sig2))

@@ -329,3 +329,50 @@ expensive fee.
   section 5 is conservative rather than exact.
 - At 81 markets `paper_lock` is **+1.82%** and hedging helped both arms
   (+$50.62 and +$241.55). The directional hit rate is still 43–51%.
+
+---
+
+## 9. What the edge actually is: the short-dated variance risk premium
+
+Inverting the model against the book gives the volatility the quotes themselves
+assume. Comparing that with the volatility the tape delivered, across 156
+settled markets and **replicated independently in both arms**:
+
+| tercile | markets | return | |
+|---|---|---|---|
+| implied ≫ realised | 52 | **+10.4%** | the book prices more doubt than there is |
+| middle | 52 | −4.3% | |
+| implied ≪ realised | 52 | **−8.8%** | the book is more certain than it should be |
+
+`paper_lock` r = −0.280 (95% band ±0.225), `paper_dir` r = −0.381 (±0.219).
+Both past their own band, same sign, on arms running different lock policies.
+
+**This is the opposite of gamma scalping.** A long-gamma rehedger earns
+(realised − implied); this earns (implied − realised). The position is not
+harvesting movement, it is selling overpriced doubt — the short-dated variance
+risk premium, on the shortest-dated option that exists.
+
+The mechanism also unifies two findings that looked unrelated:
+
+- implied ≫ realised: quotes sit near 0.50 while the outcome is already
+  decided, so the favoured side is underpriced and buying it wins.
+- implied ≪ realised: quotes run to the extremes, so longshots look cheap and
+  are not. **This is exactly the 201 legs bought under $0.20 that all settled
+  worthless.** Longshot losses and the VRP are the same phenomenon.
+
+It also demotes the ask filter: buying the favoured side is a crude proxy for
+"the book is underpricing the favourite", which is why it raised the hedge rate
+without producing alpha of its own.
+
+Crucially this is a **per-observation** feature, not a per-window one — which
+is why it replicated where trend and intensity did not (section 8).
+
+### The instrument had to be fixed first
+
+The first run of this test reported the same direction with a 0.04 median
+volatility ratio, which is not a plausible number. 11.8% of inversions were
+walking to a bound: no sigma can reprice a quote sitting on the opposite side
+of even money from spot, so the bisection ran out and returned 10000.
+`implied_sigma` now verifies its own answer and returns None instead. That
+disagreement is itself information — the book and the model differ on which
+side is favoured — but it is not a volatility. Convergence is 90.8%.

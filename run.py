@@ -716,6 +716,19 @@ async def strategy(st):
                 # --- open: directional, and only with enough of the window
                 # left for the price to move far enough to lock it.
                 ed = fair.edge(p, ask)
+                # Variance risk premium gate. Measured on 156 settled markets
+                # and replicated independently in both arms (r -0.28 / -0.38,
+                # both past their own 95% band): the trade pays when the book
+                # prices MORE uncertainty than the tape is delivering, and
+                # loses when it prices less. That is the short-dated variance
+                # risk premium, and it is the same phenomenon as every leg
+                # bought under $0.20 settling worthless -- a book that is more
+                # confident than reality makes longshots look cheap when they
+                # are not. Unlike trend or intensity this is per-observation,
+                # not per-window, which is why it replicates.
+                isig = snap.get("isig")
+                vrp_ok = (st.cfg.min_vrp <= 0 or
+                          (isig and sigma > 0 and isig / sigma >= st.cfg.min_vrp))
                 # Filters chosen by measuring which features separate legs
                 # that got hedged from legs that went naked (681 legs, AUC):
                 #   ask 0.768  -- buy the side the book already favours; a
@@ -729,6 +742,7 @@ async def strategy(st):
                 if (ed > st.cfg.min_edge and ask <= st.cfg.max_price
                         and ask >= st.cfg.min_ask
                         and depth <= st.cfg.max_depth
+                        and vrp_ok
                         and r_not <= st.cfg.max_intensity
                         and budget > st.cfg.min_usd
                         and room > 0 and tau > st.cfg.min_tau_open
@@ -1036,6 +1050,10 @@ if __name__ == "__main__":
     p.add_argument("--bankroll", type=float, default=1000.0)
     p.add_argument("--kelly", type=float, default=0.25,
                    help="Kelly fraction for directional legs; 0 = flat max-usd")
+    p.add_argument("--min-vrp", type=float, default=0.0,
+                   help="require implied/realised sigma above this before "
+                        "opening; the trade pays when the book prices more "
+                        "uncertainty than the tape delivers. 0 disables")
     p.add_argument("--min-ask", type=float, default=0.0,
                    help="floor on the price paid; buying the favoured side is "
                         "the strongest predictor that a hedge will appear")
