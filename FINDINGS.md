@@ -1698,3 +1698,47 @@ the same direction but nowhere near the 184 it needs.
 that matters this round is historical, not live: 432 resolved hourly markets at
 t = 8.49, and it points at the hourly instrument rather than at any of these
 five.
+
+---
+
+## 36. The price in that history is a mid, and the edge survives paying the ask
+
+The open question on section 34 was whether `prices-history` returns something
+executable. Cross-checked against the live book recorded in `paper_hour.db` —
+the same two-independent-sources method that settled the frozen-book question —
+on 50 timestamp-aligned pairs:
+
+| comparison | median | mean abs |
+|---|---|---|
+| p − bid | +0.50¢ | 1.42¢ |
+| p − ask | −1.50¢ | 2.18¢ |
+| **p − mid** | **+0.00¢** | **1.15¢** |
+
+**It is the mid.** The backtest was therefore buying at mid, not at a price
+anyone would fill. The hourly spread measured over 12,320 live snapshots is
+2.00¢ median (p25 1.00¢, p75 3.00¢), so crossing to the ask costs about 1.00¢.
+
+Re-run paying that, and then paying considerably more:
+
+| execution assumption | legs | markets | net/share | t |
+|---|---|---|---|---|
+| mid (original) | 2,961 | 412 | +9.47¢ | 8.49 |
+| **ask (+1.00¢)** | 2,972 | 412 | **+8.44¢** | **7.57** |
+| +2¢ (twice the half-spread) | 2,976 | 412 | +7.45¢ | 6.71 |
+| +3¢ (three times) | 2,976 | 412 | +6.45¢ | 5.80 |
+
+The threshold scan holds at the ask too: +8.44¢ at 10 points, +13.62¢ at 15,
++21.78¢ at 20.
+
+This is now the only claim in the file that has passed every check applied to
+it — per-market aggregation, all three assets, all three time bands, all three
+date ranges, the staleness test that killed six other findings, and an execution
+cost of three times the measured spread.
+
+### The limitation that remains
+
+It covers **six days**. The model's own accuracy was verified stable over
+thirty, but *model versus book* has only been tested on Sep 5–11. A 22-day
+extension is running. Until it returns, this is a strong result on a short
+window, which is precisely the shape of several findings retracted earlier in
+this file.

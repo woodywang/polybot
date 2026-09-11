@@ -22,7 +22,7 @@ def get(u, tries=4):
     return None
 
 
-def main(days=6, assets=("btc", "eth", "sol")):
+def main(days=22, assets=("btc", "eth", "sol")):
     bars = json.load(open("klines30.json"))
     tape = {}
     for sym, v in bars.items():
@@ -73,7 +73,7 @@ def main(days=6, assets=("btc", "eth", "sol")):
                                 model=fair.fair_up_naive(spot, K, tau, sig),
                                 mkt=float(p["p"]), y=1.0 if up_won else 0.0))
             print(f"  {slug[-28:]:<28} pts={len(pts):>4} total={len(out):>6}", flush=True)
-    json.dump(out, open("histtest.json", "w"))
+    json.dump(out, open("histtest22.json", "w"))
     print(f"\nDONE {len(out)} observations, {len(set((r['asset'], r['hour']) for r in out))} markets")
 
 
