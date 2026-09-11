@@ -817,3 +817,70 @@ silently stops delivering for a token after a resubscribe.
 aggregate that was too good. A 45-cent mispricing persisting for 18 seconds is
 not something the mechanism can produce, and twelve rows reading 0.51/0.50 in a
 row is not what real quotes look like.
+
+---
+
+## 19. The edge lives entirely in quotes that had stopped moving
+
+Section 18 fixed the symptom with a `tau >= 60` cutoff. That was not enough.
+Reconstructing, for every observation, how long its quote had been unchanged —
+and the reconstruction is sound, since sampling is continuous (p99 gap 0.36s,
+max 0.4s, no gaps over 2s):
+
+| time left | samples | median stale | stale > 20s |
+|---|---|---|---|
+| 180–300s | 1,194 | 0.6s | **14.2%** |
+| 120–180s | 544 | 0.6s | 18.8% |
+| 60–120s | 483 | 0.6s | 18.4% |
+| 30–60s | 188 | 0.8s | 31.4% |
+| 2–30s | 43 | 282.1s | 72.1% |
+
+Even well away from expiry, one observation in seven is against a quote that has
+not moved in 20 seconds. Excluding them:
+
+| filter | legs | markets | win | net/share | t |
+|---|---|---|---|---|---|
+| everything | 2,452 | 105 | 79.1% | +8.03¢ | 3.61 |
+| tau ≥ 60s (section 18) | 2,221 | 105 | 77.6% | +7.12¢ | 3.03 |
+| **stale < 20s** | 2,001 | 105 | 76.8% | **+0.68¢** | **0.27** |
+| stale < 5s | 1,890 | 105 | 76.7% | +0.15¢ | 0.06 |
+
+**The edge does not survive.** On quotes that are actually moving:
+
+| rule | legs | markets | net/share | t |
+|---|---|---|---|---|
+| spot rule | 2,001 | 105 | +0.68¢ | 0.27 |
+| buy the favourite | 2,001 | 105 | +4.37¢ | 1.75 |
+| TWAP model | 967 | 97 | +0.15¢ | 0.05 |
+
+None of the three is significant. Every earlier claim in this file about a
+tradeable edge was measuring quotes that had stopped updating.
+
+### The one question that decides it — and paper trading cannot answer it
+
+Stale quotes are not random. They differ from live ones in exactly the way that
+manufactures apparent edge:
+
+| | samples | median \|gap\| | median depth | direction right |
+|---|---|---|---|---|
+| live (< 20s) | 982 | 5.9 bps | 124 sh | 76.7% |
+| stale (> 20s) | 232 | **15.0 bps** | **389 sh** | **89.7%** |
+
+A 389-share order sitting 15 bps from fair value for over 20 seconds is either
+
+1. **real** — nobody is watching these thin 5-minute books, the order is
+   genuinely there, and the edge is real but only reachable by actually sending
+   an order; or
+2. **an artifact** — the feed stopped for that token and the order is long gone.
+
+Both are plausible. The feed does demonstrably stop (194, 217 and 182
+consecutive unchanged snapshots), and equally, a resting order that far from
+fair should have been taken if anyone were looking.
+
+**No amount of further paper trading distinguishes them.** The next step is not
+another arm or another filter: it is to send one small real order into a quote
+flagged stale and record whether it fills. That single experiment decides
+whether this entire strategy exists.
+
+Until then the honest statement is: **on quotes verified to be live, there is no
+measurable edge in any rule tested** — model, spot comparison, or favourite.
