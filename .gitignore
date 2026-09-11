@@ -5,3 +5,7 @@
 __pycache__/
 *.db-journal
 .claude/
+klines.json
+queuecheck.json
+stalecheck.json
+equity*.json

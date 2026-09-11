@@ -1415,3 +1415,51 @@ computed the averaging window an hour out of place.
 
 Both are now applied by `Edit` and every replacement checked, not a sample of
 them.
+
+---
+
+## 31. The model works on the hourly instrument — 498 independent outcomes
+
+Because hourly settlement is a public Binance candle, the model can be
+backtested on history rather than on the 30 markets a live arm collects in an
+hour. A week of 1-minute klines for BTC, ETH and SOL gives 29,382 observations
+across **498 independent hourly outcomes**, scored against the exact settlement
+condition:
+
+| time left | obs | model log-loss | coin flip | improvement |
+|---|---|---|---|---|
+| 2700–3600s | 7,470 | 0.6340 | 0.6931 | 8.5% |
+| 1800–2700s | 7,470 | 0.5519 | 0.6931 | 20.4% |
+| 900–1800s | 7,470 | 0.4057 | 0.6931 | 41.5% |
+| 300–900s | 4,980 | 0.2556 | 0.6931 | 63.1% |
+| 30–300s | 1,992 | 0.1245 | 0.6931 | **82.0%** |
+| **all** | 29,382 | **0.4564** | 0.6931 | **34.2%** |
+
+This is the strongest statistical evidence in the project by a wide margin —
+sixteen times the independent sample of anything measured live.
+
+Calibration shows a consistent downward bias:
+
+| model p | obs | predicted | actual | error |
+|---|---|---|---|---|
+| 0.1–0.2 | 2,042 | 0.15 | 0.106 | −0.044 |
+| 0.3–0.4 | 2,874 | 0.35 | 0.261 | **−0.089** |
+| 0.4–0.5 | 3,757 | 0.45 | 0.384 | −0.066 |
+| 0.6–0.7 | 2,943 | 0.65 | 0.687 | +0.037 |
+| 0.9–1.0 | 3,743 | 0.95 | 0.960 | +0.010 |
+
+Below even money the model overstates Up; above 0.6 it slightly understates.
+That matches the week's base rate — 48.5%, 46.1% and 47.9% Up for the three
+assets — against a model that assumes zero drift.
+
+**This is deliberately not corrected.** Fitting a drift term to one week of a
+falling market is precisely the overfit that produced six retracted sections
+here. The bias is recorded and left alone until the sample covers more regimes.
+
+### The boundary this does not cross
+
+**Predictive power is not edge.** This shows the model forecasts the settlement;
+it does not show it beats the *quoted price*, and there is no history of hourly
+quotes to test that against. The 5-minute model also "beat the book" by a wide
+margin (0.4444 against 0.5215 in section 14) and that entire result turned out
+to be frozen quotes. The live hourly arm is the only thing that settles it.
