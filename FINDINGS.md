@@ -4855,3 +4855,60 @@ assumption had sat unexamined through eighty-six sections of increasingly
 careful measurement — including several where the instrument turned out to be
 the problem. **The cheapest checks are the ones most likely to go unmade,
 precisely because nothing draws attention to them.**
+
+---
+
+## 88. The 5-minute settlement is not observable; the hourly one is. That is the whole difference.
+
+Section 87 verified hourly settlement against the Binance candle: 1,581 of 1,581,
+**0.00% disagreement**. Running the equivalent check on 5-minute markets, which
+settle on a Chainlink 60-second TWAP rather than a Binance candle:
+
+```
+5-minute settlements vs a Binance spot proxy (close of min 5 >= open of min 1)
+  agree                142
+  disagree              23     -> 13.9%
+  no candle data       132     (markets after the klines file ends)
+
+when they disagree: |move| median 3.86 bps, max 10.90 bps
+```
+
+**Fourteen percent.** And the disagreements are concentrated exactly where they
+hurt: on moves of a few basis points, which is where near-the-money contracts
+live and where every trade this project considered would have been placed.
+
+### The caveat, stated before the conclusion
+
+This compares against a *naive spot* proxy — close of the fifth minute against
+the open of the first — not against the TWAP model `fair_up` actually
+implements. The proper model does considerably better; that is exactly what
+section 61 recorded when fixing the strike from a point sample to the integral
+the settlement source uses dropped log-loss from **1.44 to 0.30**.
+
+So 13.9% is the error of the naive proxy, not of the model. What it measures
+correctly is the **size of the gap the model has to bridge**, and that gap does
+not exist at all on the hourly instrument.
+
+### Why this explains a pattern the project found empirically
+
+Every comparison between the two instruments favoured hourly, for reasons that
+looked unrelated:
+
+| | 5-minute | hourly |
+|---|---|---|
+| settlement observable from Binance | **no, ~14% ambiguous** | **yes, exactly** |
+| strike | reconstructed from a 60s integral | read from the candle open |
+| venue basis error | 5 bps, ~13-17 points of probability (§61) | same basis, but cancels exactly |
+| feed rate | 867 frames/s, drops constantly | 46 frames/s, never drops |
+| mid travel in 10s | 2.50c | 0.50c |
+| half-spread | 0.50c | 1.00c |
+
+These are not six separate facts. **A five-minute contract on a 60-second TWAP of
+a different venue's aggregate is an instrument whose payoff you cannot observe,
+priced on a book you cannot keep up with.** The hourly contract removes the first
+problem entirely — `close >= open` on a public candle — and the second by being
+twenty times quieter.
+
+That is the structural reason the project's few near-misses all lived on the
+hourly instrument, and it was visible in the settlement rules from the start
+without anyone having to trade to find it out.
