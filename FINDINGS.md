@@ -3800,3 +3800,54 @@ almost entirely its own — and that false signal is what made six earlier
 findings look real, motivated the `--max-stale` guard, and kept a dead
 hypothesis alive for fifty sections. **The single most valuable thing done today
 was measuring the instrument instead of the market.**
+
+---
+
+## 70. A pre-registered prediction for the wide-spread maker
+
+`makercheck.py` is running the section 67 configuration — post one tick above
+the touch, only where the spread still leaves half a cent — and reports markout
+at 30s and 120s. Writing the prediction down before it lands, because a result
+that can be interpreted either way afterwards is not a test.
+
+The capture available and the mid travel that has to be survived, by spread:
+
+```
+spread  capture    30s   ratio    120s   ratio
+   3c    +0.5c   2.00c   0.25   3.50c   0.14
+   4c    +1.0c   1.50c   0.67   3.50c   0.29
+   5c    +1.5c   1.50c   1.00   3.50c   0.43
+   6c    +2.0c   2.00c   1.00   5.00c   0.40
+   7c    +2.5c   2.50c   1.00   6.50c   0.38
+   8c    +3.0c   3.00c   1.00   7.50c   0.40
+                         ----          ----
+                    mean 0.82     mean 0.34
+```
+
+**The horizon decides it.** Against 30-second travel the capture is roughly
+break-even (ratio 0.82, and exactly 1.00 at every spread from 5c up). Against
+two-minute travel it is a third of what it needs (0.34).
+
+Which means the question is not whether the spread compensates for volatility —
+section 68 showed it does, at the 30-second horizon — but **how long a resting
+order has to live before it fills**. A maker filling in 30 seconds breaks even.
+A maker filling in two minutes is paid a third of the risk taken.
+
+### The prediction
+
+1. **Markout at 30s: near zero, within about ±0.5c.** The capture and the
+   30-second travel are matched by construction of the spread.
+2. **Markout at 120s: negative, roughly -60% of the capture taken.** Capture is
+   0.34 of 120s travel, so about two thirds of the move is unpaid.
+3. **Both far milder than section 57's -15c.** That figure came from the touch
+   on a 1c-spread book, where fills arrive only via sweeps and the capture is
+   -0.5c before anything happens. Here fills arrive from ordinary flow.
+
+If instead the 30s markout comes back at -5c or worse, then front-of-queue in a
+wide book is selected as brutally as the back of the queue in a narrow one, and
+the spread's apparent fairness at 30 seconds is an illusion created by measuring
+unconditional travel.
+
+Either outcome is informative. The first says making here is a latency race with
+a known finish line; the second says the flow is informed at every queue
+position and the instrument is closed for good.
