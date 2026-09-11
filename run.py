@@ -181,7 +181,51 @@ class State:
         self.mkt_cost = {}                         # slug -> capital tied up
         self.peak = a.bankroll
         self.halted = False
+        self._resume()             # a restart must not forget what was lost
         self._schema_check()       # last: it exercises every field above
+
+    def _resume(self):
+        """Rebuild equity and peak from settled markets already in the file.
+
+        The drawdown breaker compares `equity` against `peak`, and both were
+        reset to the starting bankroll on every restart -- so an account down
+        40% came back believing it was whole and the breaker started counting
+        from zero again.  paper_fav5 reached a 62.4% drawdown without ever
+        halting at its 50% limit for exactly this reason: it was restarted at
+        22:12 to change a flag, and the restart wiped the loss it was supposed
+        to be reacting to.
+
+        Reconstructed the same way `report()` does it -- per settled market,
+        payout minus cost -- so the breaker and the report agree on what the
+        account is worth.
+        """
+        res = dict(self.db.execute(
+            "SELECT slug, outcome FROM markets WHERE outcome IS NOT NULL"))
+        if not res:
+            return
+        starts = dict(self.db.execute(
+            "SELECT slug, start_ts FROM markets WHERE outcome IS NOT NULL"))
+        mp = {}
+        for slug, side, px, sz, fee in self.db.execute(
+                "SELECT slug,side,fill_px,fill_sz,fee FROM obs"
+                " WHERE fill_sz IS NOT NULL"):
+            if slug not in res:
+                continue
+            mp[slug] = mp.get(slug, 0.0) - (px * sz + (fee or 0.0)) \
+                + (sz if res[slug] == side else 0.0)
+        if not mp:
+            return
+        for slug in sorted(mp, key=lambda s: starts.get(s, 0)):
+            self.equity += mp[slug]
+            self.peak = max(self.peak, self.equity)
+        dd = (self.peak - self.equity) / max(self.peak, 1e-9)
+        print(f"[resume] {len(mp)} settled markets in {self.cfg.db}: "
+              f"equity ${self.equity:.2f} peak ${self.peak:.2f} "
+              f"drawdown {dd*100:.1f}%", flush=True)
+        if dd >= self.cfg.max_dd > 0:
+            self.halted = True
+            print(f"[HALT] resumed already past the {self.cfg.max_dd*100:.0f}% "
+                  f"drawdown limit; opening stays stopped", flush=True)
 
     def _schema_check(self):
         """Write one row of every shape at boot and roll it back.

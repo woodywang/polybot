@@ -4053,3 +4053,60 @@ Section 43 corrected a t-statistic from +4.00 to +2.48 by clustering on the
 the same five minutes of the same risk asset. That argument was made from first
 principles and is now measured: rho = 0.64. The sqrt(3) correction was, if
 anything, slightly too generous — the effective count is 1.31, not 1.
+
+---
+
+## 75. A restart wiped the drawdown breaker, and nobody noticed for four hours
+
+`paper_fav5` runs `--max-dd 0.5`. `--report` puts it at **62.4% drawdown, $100
+down to $37.64** over 23 settled markets. The breaker never fired.
+
+The in-process ledger explains why: it showed 37.7% over 17 settlements. The arm
+was restarted at 22:12 to change `--windows`, and `State.__init__` set
+`self.equity = a.bankroll` and `self.peak = a.bankroll`. **The restart told the
+account it was whole.** Every loss before 22:12 stopped existing as far as the
+breaker was concerned, and it began counting from zero against a bankroll the
+account no longer had.
+
+This is section 59's error in a second place. There it was the *reporting* of
+drawdown that was process-scoped; here it is the *control*. The same reset, and
+this time it disabled a safety limit rather than misreporting one.
+
+### The fix
+
+`State._resume()` rebuilds equity and peak at boot from the settled markets
+already in the file, the same way `report()` does — per market, payout minus
+cost, in start-time order — so the breaker and the report cannot disagree about
+what the account is worth. If the rebuilt drawdown is already past the limit, it
+halts before placing anything.
+
+Verified against the real file:
+
+```
+[resume] 23 settled markets in paper_fav5.db: equity $37.64 peak $100.00 drawdown 62.4%
+[HALT] resumed already past the 50% drawdown limit; opening stays stopped
+
+--report:  bankroll $100.00 -> $37.64   peak $100.00   max drawdown 62.4%
+```
+
+To the cent.
+
+### How many restarts were there today
+
+Arms were restarted for the UMA settlement fix, the `fav-only` gate, the
+`max_queue` fix, the exposure cap, the phantom-fill fix, and `--windows`. **Every
+one of those silently reset every running arm's drawdown limit.** The breaker has
+been decorative for most of the session, which is worth stating plainly given
+that risk control was an explicit requirement.
+
+The reason it went unnoticed is that it fails silently and in the safe-looking
+direction: a reset breaker never fires, and an arm that never halts looks like
+an arm that never needed to.
+
+### The general shape, for the third time
+
+Sections 59, 75 and the `equity`-table confusion in between are all the same
+bug: **state that belongs to the account was stored in the process.** Equity,
+peak, drawdown, and the halt flag are properties of the money, not of the
+program that happens to be managing it, and every one of them was being
+reconstructed from a command-line default on every launch.
