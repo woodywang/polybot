@@ -1092,3 +1092,50 @@ running.
 The guarded arm needs about **54 markets** for t = 2 and has 14. Nothing is
 concluded from +22%; per-market standard deviation is 81%. **Sample
 insufficient — no parameter changes made this round.**
+
+---
+
+## 24. With the guard on, four of five arms lose — by about their costs
+
+First readings from the arms that actually refuse stale quotes:
+
+| arm | markets | stake | net | return | fee | fee/stake | **gross (net + fee)** |
+|---|---|---|---|---|---|---|---|
+| base — no filter | 15 | $184.53 | −$11.37 | −6.16% | $6.83 | 3.70% | **−2.46%** |
+| fav — ask ≥ 0.50 | 12 | $128.67 | −$8.10 | −6.30% | $4.21 | 3.27% | **−3.02%** |
+| vrp — implied/realised ≥ 1.5 | 12 | $98.95 | −$19.56 | −19.77% | $3.21 | 3.25% | **−16.52%** |
+| filt — both | 12 | $115.64 | −$6.99 | −6.04% | $3.90 | 3.37% | **−2.67%** |
+| **spot — no model at all** | 30 | $313.46 | **+$27.59** | **+8.80%** | $10.96 | 3.50% | **+12.30%** |
+
+Per-market t statistics: −1.69, −0.73, −1.69, −0.87, +0.72. **Nothing is
+significant in either direction.**
+
+Two things are worth reading anyway.
+
+**The fee is 3.3–3.7% of stake in every arm** — exactly `7% × (1-p)` at prices
+around 0.5–0.6. That is a certain, unavoidable drag, and it is larger than any
+gross edge measured anywhere in this project except one.
+
+**Before fees, the model-based arms are still negative** (−2.5% to −3.0%, and
+−16.5% for the VRP filter). That is roughly the half-spread plus the measured
+slippage, which is what a rule with zero alpha pays. The model's contribution is
+not zero, it is slightly negative — it is selecting trades worse than picking at
+random would.
+
+The only arm with positive gross alpha is the one that uses no model: the spot
+comparison, +12.30% before fees and +8.80% after. On 26 markets with a 64%
+per-market standard deviation that is t = 0.72, so it is not evidence, only the
+direction the rest of the file has been pointing.
+
+### The queue diagnostic, third attempt
+
+Versions one and two both closed a price level when the **best bid moved**,
+which is not what happens to a resting order — somebody bidding higher does not
+cancel yours. Median "level lifetime" came out at 0.04s and the fill rate near
+zero, both artifacts of that clock.
+
+The arithmetic says as much: 602 trades in 55 seconds across 12 tokens at ~8
+shares each is roughly **220 sell-shares per minute per token**, against a
+median of 20–45 shares resting ahead at the bid. A queue joiner should clear in
+5–12 seconds if the price holds. Version three posts at the prevailing bid and
+holds for a fixed 60 seconds, counting every sell at or below that price.
