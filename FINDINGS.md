@@ -4307,3 +4307,75 @@ the others and the account is simply doing something invisible from here. If it
 is hundreds of milliseconds or more, there is a taker edge that every instrument
 in this project was built too slow to see** — `--max-stale` operates at 20
 seconds, four orders of magnitude above where this would live.
+
+---
+
+## 79. Diversification is capped at 1.56 bets, and time is the only axis that works
+
+Section 74 measured cross-asset correlation at rho = 0.64. The consequence for
+position sizing is sharper than it first looked. For N equally-sized positions,
+effective independent bets are `N / (1 + (N-1) rho)`:
+
+```
+    N   N_eff   risk vs independent
+    1    1.00        1.00x
+    3    1.32        1.51x
+    8    1.46        2.34x
+   25    1.53        4.04x
+  100    1.55        8.02x
+   inf   1.56
+```
+
+**The asymptote is `1/rho` = 1.56.** Holding three assets already captures 1.32
+of the 1.56 available; going from 3 positions to 100 buys 0.24 more effective
+bets while multiplying gross exposure by 33. **Cross-sectional diversification on
+this venue is essentially exhausted at three positions.**
+
+Time is different. Consecutive hourly outcomes, same asset:
+
+```
+btc  247/525 = 47.0%      (50% = independent)
+eth  229/525 = 43.6%
+sol  245/525 = 46.7%
+```
+
+Near-independent. So an account compounds **through time, not across assets** —
+which is also why `--max-committed` is the right control: capping simultaneous
+exposure costs almost no diversification, because there was almost none to lose.
+
+### The reversal in that table, and why it is not a trade
+
+Those numbers are slightly *below* 50%, which is hour-to-hour mean reversion.
+Pooled and clustered for cross-asset correlation: 45.8%, z = -2.42. Predicting
+the opposite of last hour wins 54.2%, worth +4.2 points against a 3.5-point fee
+at the money — apparently +2.7% of stake per trade.
+
+It is not, because the book already knows. Early-hour quotes (tau > 2700s, where
+the book has least information), split by the previous hour's outcome:
+
+```
+prev hour     obs    hours   mean book   y - mkt      t
+Down       10,947      329      0.5105    +0.0291   +1.21
+Up         11,045      336      0.4812    -0.0139   -0.60
+```
+
+**The book opens the hour at 0.5105 after a Down hour and 0.4812 after an Up
+hour.** It is not sitting at 0.50 waiting to be told; it leans 2.9 points in the
+reversal direction unprompted, capturing roughly 70% of the signal. The residual
+is +2.9 and -1.4 points, neither significant, and a mean absolute residual of
+~2.2 points does not clear a 3.5-point fee.
+
+### Third instance of the same pattern
+
+```
+momentum within a window (§44)   real, t = 3.3 to 9.3   book prices it (§45)
+favourite near the money (§43)   real in the raw data   book prices it (§65)
+reversal between hours (§79)     real, z = -2.42        book prices it
+```
+
+Each was found by looking at the price series, each is a genuine statistical
+property of crypto, and each is already in the quote. **The book is not
+calibrated by accident — it is calibrated conditionally, on exactly the features
+that are easy to find.** That is a much stronger statement than "the book is
+right on average", and it is the reason this project has not found a taker edge
+in seventy-nine sections.
