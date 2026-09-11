@@ -661,3 +661,52 @@ the side that was not, producing a +11.55¢ slippage figure that was discarded.
 Both were caught by numbers that did not look plausible (a 91.4% disagreement
 rate; an 11¢ slippage), which is the only reason to keep checking magnitudes
 against what the mechanism could physically produce.
+
+---
+
+## 16. The late-window rule is the first result that holds everywhere
+
+The mistake made in section 8 — treating one favourable hour as a signal — has
+to be checked against every claim since. Splitting the spot rule by hour:
+
+| hour (UTC) | last 60s | | whole window | |
+|---|---|---|---|---|
+| | net/share | t | net/share | t |
+| 14:00 | — | — | +24.36¢ | 8.29 (only 6 markets) |
+| 15:00 | +5.42¢ | 2.06 | +3.76¢ | 1.24 |
+| 16:00 | +26.30¢ | 5.69 | +16.98¢ | 4.69 |
+| 17:00 | +12.25¢ | 2.56 | **−4.47¢** | −0.81 |
+| all | **+14.12¢** | **5.81** | — | — |
+
+**The last-minute rule is positive in every hour at t ≥ 2.06; the whole-window
+version has a losing hour.** Concentrating late is not only higher return, it is
+the difference between a result that repeats and one that does not.
+
+Per asset, last 60s:
+
+| asset | legs | markets | net/share | t |
+|---|---|---|---|---|
+| BTC | 74 | 21 | +7.80¢ | 1.76 |
+| ETH | 88 | 24 | +18.30¢ | 5.17 |
+| SOL | 57 | 22 | +15.60¢ | 3.42 |
+
+All three positive — including SOL, where the favourite-longshot bias was
+absent entirely (section 13). The spot rule survives the asset split that the
+favourite rule failed. BTC at t = 1.76 is the weak one.
+
+Three hours and roughly 20 markets per hour is still not much.
+
+### A capacity estimate that is not reportable
+
+Measuring depth at the best ask when the rule fires gives 76 shares (~$54)
+median in the last minute, $15.90 at the 25th percentile. Scaling that to
+36 markets an hour produced $904/hour on $1,976 deployed — 46% an hour, which
+is obviously wrong. It breaks in three places: per-market win rates are 0 or 1
+because observations inside a window share an outcome, so multiplying by depth
+and averaging lets a few deep winners dominate; taking the full displayed size
+ignores walking the book; and the extrapolation assumes $47k/day of aggressive
+taking moves nothing.
+
+What the measurement does support, and all it supports: **at $3 a fill the
+strategy is nowhere near depth-constrained** (about 15% of median best-ask
+size). Capacity beyond a few hundred dollars per market is unmeasured.
