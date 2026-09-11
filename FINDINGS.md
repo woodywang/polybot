@@ -4565,3 +4565,67 @@ to live: inside 200 milliseconds, in the top decile of volatility, at prices
 around 0.79 where the fee is cheap. **Nothing in this harness can go there**, and
 building something that could is a different project — one whose first
 requirement is co-located infrastructure rather than a better model.
+
+---
+
+## 83. Review: the first mechanism that is the right size, and why no new arm follows it
+
+### (1) Health
+
+`observer` and `latency` both clean — no exceptions, ledger identity `$0.0000`,
+15 settled markets. `observer` has taken **9 slow-consumer drops** as the only
+5-minute subscriber running, which closes the last version of the drop
+hypothesis: it is neither contention (§56) nor token count (§73), it is the
+intrinsic message rate of one active 5-minute book.
+
+### (2) Reports
+
+```
+arm                mkts    stake      NET      pct   maxDD
+observer              0     0.00    +0.00   +0.00%       -    (by design)
+paper_fav5           23   210.78   -62.36  -29.58%   62.4%
+paper_dog5           18   165.76   +18.24  +11.00%   18.7%
+stale5               11    85.82    -1.88   -2.19%   35.3%
+paper_hour            6   199.50   -17.71   -8.87%   38.7%
+maker_front           1    13.00    -7.92  -60.89%    7.9%
+```
+
+All retired. `observer` trades nothing (`--min-edge 99`) and exists only to
+collect unselected samples.
+
+### (3) What this round learned
+
+**The book's reaction time is 200 milliseconds** (§82), and in the top decile of
+volatility that is worth 1.77c a share — within 8% of the section 1 account's
+measured gross edge of 1.64c, derived without using the account's data.
+
+Every previous mechanism was wrong by one to two orders of magnitude. This is
+the first one whose size is even plausible. It is also the only region the
+harness was structurally unable to examine: a 200ms window against a 250ms
+strategy loop and a staleness guard set four orders of magnitude too coarse.
+
+Nothing was overturned this round. What changed is that the project now has a
+**location** for the thing it failed to find, rather than only a list of places
+it is not.
+
+### (4) Adjustment: replicate, do not build
+
+The obvious next step would be an arm that trades the 200ms window. **That would
+be dishonest.** Detecting the mispricing inside 200ms is possible; *filling* it
+requires an order round-trip to the CLOB well under that, from a machine that is
+not co-located, with a signing step in between. A paper arm would report profits
+from fills that could not happen — the fill assumption this project has flagged
+as untested since section 1, in the one regime where it is certainly false.
+
+So instead the measurement is being **replicated**: 40 minutes on ETH rather than
+25 on BTC, because the entire finding rests on a single window on a single asset
+and a 0.19 correlation. If the peak does not reappear at 200ms, section 82 is
+noise and should be struck.
+
+### Samples
+
+`observer`: 465 samples, 15 settled markets, accumulating at 27 markets/hour.
+Section 42's baseline is 168 markets, so the clean-feed re-test becomes possible
+in **roughly 5.8 hours** — around 05:00 UTC. **Every review before then will say
+"sample insufficient" about it, and that is calculable now rather than
+discoverable later.**
