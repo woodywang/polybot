@@ -3958,3 +3958,46 @@ one market — three legs of one hour of one asset.
 The only thing this round produced is the retraction above, and it came from
 auditing a claim rather than from the P&L table. That is the third time today
 that checking a *stated* property has been worth more than reading a result.
+
+---
+
+## 73. Cutting the subscription did not cut the drops
+
+Section 71 identified what looked like an easy win: each 5-minute arm subscribes
+to three windows (18 tokens) but only ever trades the current one, so the third
+window is pure traffic. `--windows 2` cuts it to 12 tokens.
+
+Within the same arm, same process configuration, only the lookahead changed:
+
+```
+paper_fav5  --windows 3   4 drops / 31 min = 0.129/min
+paper_fav5  --windows 2   5 drops / 19 min = 0.263/min
+```
+
+**No improvement.** Four and five events is noise-dominated — observing 5 where
+2.45 were expected is p ~ 0.08, so this is not evidence of harm either — but
+there is no sign of the benefit the change was made for.
+
+The explanation is in the thing I should have measured first: a market five to
+ten minutes from opening has almost **no quote activity**. The 867 frames/s
+comes overwhelmingly from the six tokens of the *current* window, where the
+price is actually moving. Cutting twelve idle tokens removed twelve idle
+subscriptions.
+
+`--windows 2` stays, because the third window genuinely does nothing and costing
+nothing is still better than costing a little. But **the drop rate is not a
+subscription problem and cannot be fixed by subscribing to less.** It is the
+intrinsic message rate of an active 5-minute book against a Python event loop,
+and the only real fixes are a faster consumer or a separate process per feed.
+
+### The pattern, again
+
+This is the second optimisation today aimed at the drop rate, and the second
+time the hypothesis was wrong: section 56 blamed contention between collectors
+(it was per-process capacity), and this one blamed token count (it is message
+rate per token). What actually halved the drops was `max_queue=None`, which
+addressed neither — it just stopped the client from applying backpressure.
+
+**Three guesses, one hit, and the hit came from reading the library's defaults
+rather than from reasoning about load.** Worth remembering the next time a
+performance story feels obvious.
