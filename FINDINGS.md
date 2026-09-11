@@ -2510,6 +2510,9 @@ the last hour rather than arguing about it.
 
 ## 49. A bucket-width bug, and the corrected result is stronger
 
+> **Every figure in this section is hour-clustered — see section 65 for the
+> exposure-weighted versions. The taker column changes sign.**
+
 > **Maker column retracted — see section 51.** The bucket fix was correct
 > and the klines figures stand. The hourly *book* bias does not.
 
@@ -3471,3 +3474,57 @@ project has been able to engineer deliberately.
 
 Two settlements each so far, so the cap's ceiling has not been tested against a
 busy stretch. Recorded as confirmed-binding, not as validated.
+
+---
+
+## 65. Exposure-weighted, the hourly taker loses and the maker earns exactly the spread
+
+Section 51 established that hour-clustered equal weighting is not the estimand a
+trader gets: it gives each market one vote regardless of how long it was
+tradable, and dwell time is a function of the outcome. It applied that
+correction to the "book bias" column and left the other two alone. Applying it
+to all three:
+
+```
+                          obs-weighted    hour-clustered
+vs mid                      +0.0039         +0.0448   t=+4.03
+taker net (spread + fee)    -0.0227         +0.0181   t=+1.63
+maker net (earns spread)    +0.0139         +0.0548   t=+4.93
+```
+
+**The taker column changes sign.** Section 49 reported +1.81c a share at t=1.63,
+which read as "positive but not significant". Weighted by actual exposure it is
+**-2.27c** — the same answer sections 41, 42, 45 and 51 give, now from the
+cleanest dataset in the project (527 hours, 93k quotes, REST history rather than
+a websocket).
+
+And the maker figure lands exactly where the mechanism says it should:
+
+```
+half-spread                 +1.00c
+book bias (exposure-wtd)    +0.39c
+                            ------
+maker gross                 +1.39c   <- measured: +1.39c
+```
+
+That is not a coincidence, it is a consistency check passing. The maker's income
+**is** the spread plus whatever the mid is wrong by, and both terms are now
+measured independently and add up.
+
+### So the full picture, all exposure-weighted
+
+| | per share |
+|---|---|
+| book mid's error | +0.39c |
+| taker: crosses the spread, pays `7%x(1-p)` | **-2.27c** |
+| maker: earns the spread, pays no fee | **+1.39c** *in theory* |
+| maker: at the touch, when it actually fills | **-15c** (§57, sweeps) |
+| maker: one tick up, where it does fill | **-0.5c on entry** (§63, tick grid) |
+
+The theoretical maker edge is real and it is 1.39c. It is also unreachable: the
+only two prices the grid offers are one where you do not fill except on sweeps,
+and one that already costs half a cent more than the edge is worth.
+
+**Every route through this instrument is now measured and every one is
+negative.** Not "unproven" — measured, on the largest and cleanest sample the
+project has, with the weighting a trader actually experiences.
