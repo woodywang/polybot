@@ -984,14 +984,17 @@ def report(a):
             tot["pair_n"] += m
             tot["pair_cost"] += cost
             tot["pair_pay"] += m
-        for side in ("Up", "Down"):                # leftover directional
-            held = p[side]
-            extra = held[0] - m
-            if extra > 1e-9 and held[0] > 0:
-                tot["naked_cost"] += held[1] / held[0] * extra
+        # The residue is what is LEFT, so take it by subtraction.  Pricing it
+        # at blended average cost instead mixes two costing bases -- the pairs
+        # come from the FIFO `matched` ledger, and the lots it consumed are not
+        # the average -- and the split then fails to add back up to the money
+        # actually spent.  It was short by $46 on a $797 book before this.
+        tot["naked_cost"] += p["Up"][1] + p["Down"][1] - cost
+        tot["naked_pay"] += p[res[slug]][0] - m
+        for side in ("Up", "Down"):
+            if p[side][0] - m > 1e-9:
                 tot["naked_n"] += 1
                 if res[slug] == side:
-                    tot["naked_pay"] += extra
                     tot["win"] += 1
 
     pp = tot["pair_pay"] - tot["pair_cost"]
@@ -1036,6 +1039,43 @@ def report(a):
               f"  ({(c_pay-c_cost)/max(c_cost,1e-9)*100:+.2f}%)")
         print(f"  -> hedging changed the result by "
               f"${(pp+np_)-(c_pay-c_cost):+,.2f}")
+
+    # --- is the hedge leg itself a good purchase?
+    # Section 5 established the sequential lock is not arbitrage: it is the
+    # winning branch of a directional bet.  It can still ADD value, but only if
+    # the hedge leg is bought at a price that is +EV on its own -- that is what
+    # `--lock-mode edge` tries to require.  Whether the pair came in under $1 is
+    # a different question and does not answer this one.
+    lk = {}
+    for slug, kind, side, *_ , px, sz, fee in rows:
+        if kind != "lock" or not sz:
+            continue
+        e = lk.setdefault(slug, [0.0, 0.0, 0, 0])
+        e[0] += px * sz + fee
+        e[3] += 1
+        if res[slug] == side:
+            e[1] += sz
+            e[2] += 1
+    if lk:
+        l_cost = sum(v[0] for v in lk.values())
+        l_pay = sum(v[1] for v in lk.values())
+        l_won = sum(v[2] for v in lk.values())
+        l_legs = sum(v[3] for v in lk.values())
+        per_m = [v[1] - v[0] for v in lk.values()]
+        mu = statistics.mean(per_m)
+        sd = statistics.stdev(per_m) if len(per_m) > 1 else 0.0
+        tt = mu / (sd / math.sqrt(len(per_m))) if sd else 0.0
+        print(f"\nhedge leg as a standalone bet"
+              f"  ({l_legs} legs over {len(lk)} markets):")
+        print(f"  stake ${l_cost:,.2f}  payout ${l_pay:,.2f}"
+              f"  NET ${l_pay-l_cost:>+,.2f}"
+              f"  ({(l_pay-l_cost)/max(l_cost,1e-9)*100:+.2f}%)"
+              f"   won {l_won}/{l_legs}")
+        print(f"  per market ${mu:+.4f}  sd ${sd:.4f}  t={tt:+.2f}"
+              f"   (needs |t|>2.64 under the six-arm Bonferroni)")
+        gap = (pp + np_) - ((c_pay - c_cost) + (l_pay - l_cost))
+        print(f"  identity check: pairs+residue - (opens+hedges) = ${gap:+.4f}"
+              f"   {'OK' if abs(gap) < 0.01 else '<<< BROKEN'}")
 
     # --- was simultaneous arbitrage ever available?
     r = db.execute("SELECT COUNT(*), MIN(cost), AVG(cost),"

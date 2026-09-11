@@ -1852,6 +1852,12 @@ hourly arm's first markets settle shortly.
 
 ## 39. The contradiction resolves: both measurements were right about different things
 
+> **RETRACTED within the hour — see section 40.** The numbers below come
+> from a decomposition that did not conserve money: it priced hedged pairs
+> from the FIFO ledger and the naked residue at blended average cost, and was
+> short $46 of spend on a $797 book. The residue was not +$5.32; it was
+> −$45.77. The structural claim reverses with it.
+
 Section 38 recorded a gap it could not explain — the spot rule measured offline
 gave +0.68¢ at t = 0.27 (no edge) while the live arm running it reports +14.26%
 per market. `--report` splits the arm's P&L and the answer is immediate:
@@ -1892,3 +1898,87 @@ than of the instrument, the pairs' $0.8428 per dollar goes with it.
 That is the thing to watch, and it is not yet answerable: `spot` has 63 markets
 against the ~45 its own variance demands for t = 2, but under the six-arm
 Bonferroni threshold of |t| > 2.64 it remains unproven at 2.35.
+
+---
+
+## 40. The decomposition was losing $46, and fixing it reverses section 39
+
+Section 39 claimed the profit lived in hedged pairs while the naked residue
+broke even. Before writing anything further I checked whether the split adds
+back up. It does not:
+
+```
+paper100_spot   pairs + residue cost   513.24 + 238.03  =  751.27
+                opens + hedges  cost   638.99 + 158.54  =  797.53
+                                              missing  =   -46.26
+```
+
+Every share settles at exactly 0 or 1, so regrouping the same legs into
+pairs-and-residue **must** reproduce open-legs-plus-hedge-legs. The gap was
+a costing-basis mismatch: pairs came from the FIFO `matched` ledger while the
+residue was priced at blended average cost. The lots FIFO consumed are not the
+average, so the survivors were valued too cheaply — the residue looked $46
+better than it was. This is the same average-cost leak already fixed once for
+the pairs, still live on the other side of the split.
+
+The residue is now taken by subtraction (`total spend − matched cost`), which
+conserves by construction, and `report()` prints an identity check that fails
+loudly if it ever stops holding.
+
+### What the arms actually show
+
+| arm | pairs | residue | **NET** | was |
+|---|---|---|---|---|
+| `paper100_spot` | +$105.20 | **−$45.77** | **+$59.43 (+6.87%)** | +13.45% |
+| `paper100_fav` | +$69.17 | **−$56.45** | **+$12.71 (+2.14%)** | +7.61% |
+| `paper100_filt` | +$54.67 | **−$36.12** | **+$18.54 (+3.65%)** | +6.09% |
+| `paper_lock` | +$2,215.42 | **−$2,234.36** | **−$18.94 (−0.07%)** | — |
+| `paper_dir` | +$2,768.60 | **−$3,247.65** | **−$479.06 (−2.17%)** | — |
+
+The structure reverses: pairs profitable and residue **deeply negative in every
+single arm**, not break-even. `paper_lock` is the cleanest statement of it —
+$2,215 of "locked profit" against $2,234 of residue loss, netting −$19 on a
+$28,432 book.
+
+### The pair cost was never a result
+
+"Cost per $1 pair = $0.84" is not a measurement of profit. You only ever get a
+cheap pair when the first leg already moved your way; when it moves against
+you the hedge is expensive, you decline it, and the leg dies naked. **The
+number is conditioned on having been right**, and the branch it conditions away
+is precisely the residue. Reporting the pair cost without it is selection
+effect quoted as edge, and this project has quoted it for many sections.
+
+### What is left is two questions, not three
+
+With the identity restored, the arithmetic is exact in all five arms:
+
+```
+NET  =  (open legs held to settlement)  +  (hedge legs held to settlement)
+
+spot   +59.43  =   +44.44  +  +14.99
+fav    +12.71  =    -6.83  +  +19.54
+filt   +18.54  =   -24.27  +  +42.81
+lock   -18.94  =  +411.97  + -430.90
+dir   -479.06  = -1466.19  + +987.13
+```
+
+Pairing is pure regrouping and contributes nothing of its own. The only two
+questions are whether the open legs have directional edge and whether the hedge
+legs do — and "hedging changed the result by $X" is now visibly just the hedge
+leg's own directional P&L under another name.
+
+### Neither has been shown
+
+| arm | hedge leg alone | per market | t |
+|---|---|---|---|
+| `paper_dir` | +21.10% | +$7.65 | +1.95 |
+| `paper100_filt` | +49.93% | +$1.53 | +1.69 |
+| `paper100_fav` | +20.92% | +$0.51 | +0.67 |
+| `paper100_spot` | +9.07% | +$0.30 | +0.47 |
+| `paper_lock` | −3.66% | −$2.58 | −0.78 |
+
+Not one reaches |t| = 2, let alone the 2.64 the six-arm Bonferroni demands —
+and the two arms with the largest samples (183 markets each) sit at −0.07% and
+−2.17% net. Section 39's "one live arm crosses t = 2" does not survive either:
+it was measuring the inflated total.

@@ -1,0 +1,351 @@
+<title>Hedging Policy Trials</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --ground:       #fbfbfc;
+    --panel:        #ffffff;
+    --ink:          #0e1116;
+    --ink-2:        #565d68;
+    --ink-3:        #8b929c;
+    --rule:         #e3e6ea;
+    --rule-soft:    #eef0f3;
+    --grid:         #e8ebef;
+    --s1: #2a78d6;  --s2: #eb6834;  --s3: #1baf7a;  --s4: #eda100;
+    --neg:          #c2410c;
+    --base-line:    #b6bdc7;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground:    #14171b;
+      --panel:     #1a1e23;
+      --ink:       #f2f4f7;
+      --ink-2:     #a8b0ba;
+      --ink-3:     #6f7783;
+      --rule:      #262b31;
+      --rule-soft: #1f242a;
+      --grid:      #232931;
+      --s1: #3987e5;  --s2: #d95926;  --s3: #199e70;  --s4: #c98500;
+      --neg:        #e07a4a;
+      --base-line:  #4a525c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground:    #14171b;
+    --panel:     #1a1e23;
+    --ink:       #f2f4f7;
+    --ink-2:     #a8b0ba;
+    --ink-3:     #6f7783;
+    --rule:      #262b31;
+    --rule-soft: #1f242a;
+    --grid:      #232931;
+    --s1: #3987e5;  --s2: #d95926;  --s3: #199e70;  --s4: #c98500;
+    --neg:        #e07a4a;
+    --base-line:  #4a525c;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    margin: 0;
+    padding-inline: 20px;
+    padding-block: 40px 64px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+  h1 { font-size: clamp(26px, 4.4vw, 36px); font-weight: 600; letter-spacing: -.018em;
+       margin: 0 0 12px; text-wrap: balance; }
+  .lede { color: var(--ink-2); margin: 0; max-width: 62ch; }
+  .lede b { color: var(--ink); font-weight: 600; }
+
+  .capital {
+    border: 1px solid var(--rule); border-left: 3px solid var(--s1);
+    background: var(--panel); border-radius: 3px; padding: 18px 20px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .capital h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .capital p { margin: 0; color: var(--ink-2); font-size: 14px; max-width: 64ch; }
+  .knobs { display: flex; flex-wrap: wrap; gap: 8px 26px; font-family: var(--mono); font-size: 12.5px; }
+  .knobs div { display: flex; gap: 8px; align-items: baseline; }
+  .knobs code { color: var(--s1); }
+  .knobs span { color: var(--ink-2); }
+
+  .arms { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+          background: var(--rule); border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
+  .arm { background: var(--panel); padding: 15px 16px 16px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .arm .swatch { width: 22px; height: 3px; border-radius: 2px; margin-bottom: 7px; }
+  .arm .name { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--ink);
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .arm .rule { font-size: 11.5px; color: var(--ink-3); min-height: 2.6em; line-height: 1.3; }
+  .arm .val { font-family: var(--mono); font-size: 21px; font-weight: 500; letter-spacing: -.02em;
+              font-variant-numeric: tabular-nums; margin-top: 5px; }
+  .arm .sub { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2);
+              font-variant-numeric: tabular-nums; }
+  .up { color: var(--s3); } .down { color: var(--neg); } .idle { color: var(--ink-3); }
+
+  section > h2 { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+  section > .note { font-size: 13.5px; color: var(--ink-2); margin: 0 0 16px; max-width: 64ch; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-bottom: 10px;
+            font-family: var(--mono); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-2); }
+  .legend i { width: 13px; height: 3px; border-radius: 2px; display: inline-block; }
+
+  .chart { position: relative; background: var(--panel); border: 1px solid var(--rule);
+           border-radius: 3px; padding: 14px 10px 6px; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .tick { font-family: var(--mono); font-size: 10.5px; fill: var(--ink-3); }
+  .dlabel { font-family: var(--mono); font-size: 11px; font-weight: 500; }
+
+  .tip { position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+         background: var(--panel); border: 1px solid var(--rule); border-radius: 3px;
+         padding: 8px 10px; font-family: var(--mono); font-size: 11.5px; line-height: 1.65;
+         box-shadow: 0 4px 14px rgba(0,0,0,.13); z-index: 5; white-space: nowrap;
+         font-variant-numeric: tabular-nums; }
+  .tip .th { color: var(--ink-3); margin-bottom: 3px; }
+  .tip .row { display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
+  .tip .row i { width: 9px; height: 3px; border-radius: 2px; }
+  .tip .row b { color: var(--ink); font-weight: 500; margin-left: auto; padding-left: 14px; }
+
+  .tblwrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12.5px;
+          font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--ink-3); font-weight: 500; font-size: 11px; letter-spacing: .05em;
+             text-transform: uppercase; border-bottom: 1px solid var(--rule); }
+  td .sw { display: inline-block; width: 11px; height: 3px; border-radius: 2px; margin-right: 8px;
+           vertical-align: middle; }
+
+  footer { border-top: 1px solid var(--rule); padding-top: 18px; color: var(--ink-3); font-size: 12.5px; }
+  footer p { margin: 0 0 8px; max-width: 70ch; }
+  footer code { font-family: var(--mono); color: var(--ink-2); }
+
+  @media (max-width: 720px) {
+    .arms { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 420px) {
+    .arms { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Polymarket · 5-minute crypto Up/Down · paper</p>
+    <h1>Four hedging policies, one order book</h1>
+    <p class="lede">Every arm reads the same consolidated Binance + Coinbase feed and the same
+      Polymarket book. The only variable is <b>when to buy the opposite side</b>. Equity starts at
+      a notional $1,000 and moves only on settled markets, 2026-09-11 14:50–16:30 UTC.</p>
+  </header>
+
+  <div class="capital">
+    <h2>There is no account balance — three caps set the size</h2>
+    <div class="knobs">
+      <div><code>--bankroll 1000</code><span>Kelly denominator only</span></div>
+      <div><code>--max-usd 25</code><span>per fill</span></div>
+      <div><code>--max-per-market 60</code><span>per market &amp; side</span></div>
+      <div><code>--kelly 0.25</code><span>fraction</span></div>
+    </div>
+    <p>The harness never tracks a balance, so the “stake” in the run reports is cumulative capital
+      deployed, not capital at risk at once. The number that would actually have to be funded is
+      <b>peak simultaneous exposure</b>, measured below at <b>$941 – $1,498</b> depending on the arm.</p>
+  </div>
+
+  <div class="arms" id="arms"></div>
+
+  <section>
+    <h2>Equity</h2>
+    <p class="note">Cumulative P&amp;L over settled markets, marked at each settlement. The
+      $1,000 rule is the starting line, not a floor.</p>
+    <div class="legend" id="leg1"></div>
+    <div class="chart"><svg id="eq" viewBox="0 0 860 320" role="img"
+      aria-label="Equity curves for four hedging policies"></svg><div class="tip" id="tip1"></div></div>
+  </section>
+
+  <section>
+    <h2>Drawdown</h2>
+    <p class="note">Distance below each arm’s own running peak. Under a random walk this envelope
+      widens as <span style="font-family:var(--mono)">σ√n</span>, which is why a fixed percentage
+      stop-loss would fire on ordinary noise here.</p>
+    <div class="legend" id="leg2"></div>
+    <div class="chart"><svg id="dd" viewBox="0 0 860 260" role="img"
+      aria-label="Drawdown curves for four hedging policies"></svg><div class="tip" id="tip2"></div></div>
+  </section>
+
+  <section>
+    <h2>Table view</h2>
+    <div class="tblwrap"><table id="tbl">
+      <thead><tr><th>Arm</th><th>Lock rule</th><th>Settled</th><th>Final equity</th>
+        <th>Net</th><th>Max drawdown</th><th>Peak exposure</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <footer>
+    <p>Paper only — no orders are sent. Fills are simulated against the displayed book after a
+      250 ms round trip, charged the real taker fee <code>shares × 0.07 × p × (1−p)</code>.</p>
+    <p>Hedged pairs settle at exactly $1.00; unhedged legs settle at $1.00 or zero. Breakeven is
+      <code>naked capital share &lt; pair margin ÷ (1 + pair margin)</code>.</p>
+    <p><code>paper_gate</code> started at 16:28 UTC and has no settled markets yet; its line begins
+      once it does.</p>
+  </footer>
+</div>
+
+<script>
+const DATA = {"paper_lock":{"pts":[[1789138200,1002.57,0.0],[1789138200,1004.29,0.0],[1789138200,1006.6,0.0],[1789138500,1009.37,0.0],[1789138500,968.1,-41.27],[1789138500,975.9,-33.47],[1789138800,980.88,-28.49],[1789138800,988.25,-21.12],[1789138800,1021.07,0.0],[1789139100,1026.03,0.0],[1789139100,1041.98,0.0],[1789139100,1046.04,0.0],[1789139400,1020.91,-25.13],[1789139400,1062.88,0.0],[1789139400,1125.63,0.0],[1789139700,1131.34,0.0],[1789139700,1135.04,0.0],[1789139700,1140.46,0.0],[1789140000,1144.95,0.0],[1789140000,1174.19,0.0],[1789140000,1178.56,0.0],[1789140300,1136.35,-42.2],[1789140300,1114.27,-64.28],[1789140300,1118.08,-60.47],[1789140600,1159.49,-19.07],[1789140600,1172.7,-5.85],[1789140600,1129.84,-48.72],[1789140900,1138.8,-39.75],[1789140900,1116.49,-62.06],[1789140900,1080.09,-98.47],[1789141200,1097.07,-81.49],[1789141200,1081.49,-97.07],[1789141200,1074.15,-104.4],[1789141500,1076.18,-102.37],[1789141500,1085.2,-93.35],[1789141500,1092.33,-86.22],[1789141800,1046.96,-131.59],[1789141800,1016.86,-161.7],[1789141800,964.7,-213.86],[1789142100,972.08,-206.47],[1789142100,987.13,-191.43],[1789142100,1003.99,-174.56],[1789142400,994.09,-184.47],[1789142400,970.16,-208.39],[1789142400,964.48,-214.07],[1789142700,959.45,-219.11],[1789142700,963.77,-214.79],[1789142700,966.47,-212.09],[1789143000,989.64,-188.92],[1789143000,980.62,-197.94],[1789143000,945.67,-232.88],[1789143300,951.58,-226.98],[1789143300,955.16,-223.39],[1789143300,961.84,-216.72],[1789143600,918.57,-259.99],[1789143600,890.64,-287.91],[1789143600,897.35,-281.21],[1789143900,949.22,-229.33],[1789143900,1003.07,-175.49],[1789143900,1052.9,-125.66],[1789144200,1047.13,-131.42],[1789144200,1040.49,-138.06],[1789144200,1034.01,-144.54]],"n":63,"peak":1331.69,"total":34.01,"maxdd":-287.91},"paper_dir":{"pts":[[1789138200,1025.56,0.0],[1789138200,1058.52,0.0],[1789138200,1090.97,0.0],[1789138500,1055.22,-35.75],[1789138500,1067.11,-23.86],[1789138500,1034.95,-56.02],[1789138800,974.66,-116.31],[1789138800,932.01,-158.96],[1789138800,931.67,-159.3],[1789139100,929.3,-161.67],[1789139100,934.02,-156.95],[1789139100,886.49,-204.48],[1789139400,861.9,-229.07],[1789139400,814.47,-276.5],[1789139400,770.84,-320.13],[1789139700,817.25,-273.72],[1789139700,874.27,-216.7],[1789139700,904.21,-186.76],[1789140000,878.81,-212.16],[1789140000,904.94,-186.03],[1789140000,849.45,-241.52],[1789140300,809.46,-281.51],[1789140300,772.75,-318.22],[1789140300,762.85,-328.12],[1789140600,808.36,-282.61],[1789140600,780.23,-310.74],[1789140600,740.34,-350.63],[1789140900,806.93,-284.04],[1789140900,785.92,-305.05],[1789140900,759.46,-331.51],[1789141200,727.02,-363.95],[1789141200,731.68,-359.29],[1789141200,709.84,-381.13],[1789141500,746.31,-344.66],[1789141500,741.27,-349.7],[1789141500,695.07,-395.9],[1789141800,667.53,-423.44],[1789141800,631.67,-459.3],[1789141800,598.88,-492.09],[1789142100,538.55,-552.42],[1789142100,538.01,-552.96],[1789142100,581.78,-509.19],[1789142400,572.97,-518.0],[1789142400,544.44,-546.53],[1789142400,525.0,-565.97],[1789142700,500.8,-590.17],[1789142700,531.26,-559.71],[1789142700,561.38,-529.59],[1789143000,513.12,-577.85],[1789143000,528.45,-562.52],[1789143000,534.64,-556.33],[1789143300,565.61,-525.36],[1789143300,532.9,-558.07],[1789143300,553.4,-537.57],[1789143600,498.78,-592.19],[1789143600,438.72,-652.25],[1789143600,382.02,-708.95],[1789143900,433.89,-657.08],[1789143900,487.71,-603.26],[1789143900,537.54,-553.43],[1789144200,531.77,-559.2],[1789144200,525.16,-565.81],[1789144200,518.91,-572.06]],"n":63,"peak":1498.39,"total":-481.09,"maxdd":-708.95},"paper_patient":{"pts":[[1789141800,952.68,-47.32],[1789141800,896.14,-103.86],[1789141800,843.97,-156.03],[1789142100,859.35,-140.65],[1789142100,874.09,-125.91],[1789142100,883.75,-116.25],[1789142400,868.46,-131.54],[1789142400,863.07,-136.93],[1789142400,832.76,-167.24],[1789142700,866.25,-133.75],[1789142700,873.35,-126.65],[1789142700,867.4,-132.6],[1789143000,873.82,-126.18],[1789143000,851.79,-148.21],[1789143000,832.48,-167.52],[1789143300,830.4,-169.6],[1789143300,838.01,-161.99],[1789143300,850.19,-149.81],[1789143600,824.65,-175.35],[1789143600,800.65,-199.35],[1789143600,810.9,-189.1],[1789143900,862.77,-137.23],[1789143900,916.6,-83.4],[1789143900,966.43,-33.57],[1789144200,960.66,-39.34],[1789144200,954.02,-45.98],[1789144200,947.47,-52.53]],"n":27,"peak":940.51,"total":-52.53,"maxdd":-199.35},"paper_gate":{"pts":[],"n":0,"peak":0,"total":0,"maxdd":0}};
+
+const ARMS = [
+  { key:"paper_lock",    label:"paper_lock",    v:"--s1", rule:"Hedge whenever the pair is under $1 (1.5¢ margin)" },
+  { key:"paper_dir",     label:"paper_dir",     v:"--s2", rule:"Hedge only when the hedge leg is itself +EV" },
+  { key:"paper_patient", label:"paper_patient", v:"--s3", rule:"Pair under $1, but demand a 5¢ margin" },
+  { key:"paper_gate",    label:"paper_gate",    v:"--s4", rule:"Refuse legs a hedge probably can’t reach" },
+];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const money = n => (n<0?"−$":"$") + Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const hhmm = t => new Date(t*1000).toISOString().slice(11,16);
+
+const live = ARMS.filter(a => (DATA[a.key]?.pts||[]).length);
+const allT = live.flatMap(a => DATA[a.key].pts.map(p => p[0]));
+const T0 = Math.min(...allT), T1 = Math.max(...allT);
+
+/* ---- stat tiles ---- */
+document.getElementById("arms").innerHTML = ARMS.map(a => {
+  const d = DATA[a.key] || {pts:[],n:0,total:0,maxdd:0,peak:0};
+  const on = d.pts.length, net = d.total;
+  const cls = !on ? "idle" : net >= 0 ? "up" : "down";
+  return `<div class="arm">
+    <div class="swatch" style="background:var(${a.v})"></div>
+    <div class="name">${a.label}</div>
+    <div class="rule">${a.rule}</div>
+    <div class="val ${cls}">${on ? money(1000+net) : "—"}</div>
+    <div class="sub">${on ? `${net>=0?"+":"−"}$${Math.abs(net).toFixed(2)} · ${d.n} settled` : "collecting"}</div>
+  </div>`;
+}).join("");
+
+/* ---- legends ---- */
+const legHTML = live.map(a =>
+  `<span><i style="background:var(${a.v})"></i>${a.label}</span>`).join("");
+document.getElementById("leg1").innerHTML = legHTML;
+document.getElementById("leg2").innerHTML = legHTML;
+
+/* ---- chart builder ---- */
+function draw(svgId, tipId, valueIdx, opts) {
+  const svg = document.getElementById(svgId), tip = document.getElementById(tipId);
+  const W = 860, H = opts.h, M = { t: 14, r: 74, b: 26, l: 56 };
+  const iw = W - M.l - M.r, ih = H - M.t - M.b;
+
+  const vals = live.flatMap(a => DATA[a.key].pts.map(p => p[valueIdx])).concat(opts.include);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = (hi - lo) * 0.12 || 10;
+  lo -= pad; hi += pad;
+
+  const X = t => M.l + (t - T0) / (T1 - T0 || 1) * iw;
+  const Y = v => M.t + (hi - v) / (hi - lo || 1) * ih;
+
+  const ticks = [];
+  const step = Math.pow(10, Math.floor(Math.log10((hi - lo) / 4)));
+  const nice = [1, 2, 2.5, 5, 10].map(m => m * step).find(s => (hi - lo) / s <= 5) || step;
+  for (let v = Math.ceil(lo / nice) * nice; v <= hi; v += nice) ticks.push(v);
+
+  let s = "";
+  for (const v of ticks) {
+    const isBase = Math.abs(v - opts.baseline) < 1e-9;
+    s += `<line x1="${M.l}" y1="${Y(v).toFixed(1)}" x2="${M.l+iw}" y2="${Y(v).toFixed(1)}"
+      stroke="${isBase ? css('--base-line') : css('--grid')}" stroke-width="1"
+      ${isBase ? 'stroke-dasharray="3 3"' : ''}/>`;
+    s += `<text class="tick" x="${M.l-9}" y="${(Y(v)+3.5).toFixed(1)}" text-anchor="end">${opts.fmt(v)}</text>`;
+  }
+  const tn = 5;
+  for (let i = 0; i <= tn; i++) {
+    const t = T0 + (T1 - T0) * i / tn;
+    s += `<text class="tick" x="${X(t).toFixed(1)}" y="${H-8}" text-anchor="middle">${hhmm(t)}</text>`;
+  }
+
+  for (const a of live) {
+    const pts = DATA[a.key].pts;
+    const d = pts.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[valueIdx]).toFixed(1)}`).join("");
+    if (opts.fill) {
+      const area = d + `L${X(pts[pts.length-1][0]).toFixed(1)},${Y(0).toFixed(1)}L${X(pts[0][0]).toFixed(1)},${Y(0).toFixed(1)}Z`;
+      s += `<path d="${area}" fill="var(${a.v})" fill-opacity=".10"/>`;
+    }
+    s += `<path d="${d}" fill="none" stroke="var(${a.v})" stroke-width="2"
+      stroke-linejoin="round" stroke-linecap="round"/>`;
+    const last = pts[pts.length - 1];
+    s += `<circle cx="${X(last[0]).toFixed(1)}" cy="${Y(last[valueIdx]).toFixed(1)}" r="3.5"
+      fill="var(${a.v})" stroke="var(--panel)" stroke-width="2"/>`;
+    s += `<text class="dlabel" x="${(X(last[0])+9).toFixed(1)}" y="${(Y(last[valueIdx])+4).toFixed(1)}"
+      fill="var(${a.v})">${opts.fmt(last[valueIdx])}</text>`;
+  }
+  s += `<line id="${svgId}-cx" x1="0" y1="${M.t}" x2="0" y2="${M.t+ih}"
+    stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 3" opacity="0"/>`;
+  s += `<rect x="${M.l}" y="${M.t}" width="${iw}" height="${ih}" fill="transparent" id="${svgId}-hit"/>`;
+  svg.innerHTML = s;
+
+  const cx = document.getElementById(`${svgId}-cx`);
+  const hit = document.getElementById(`${svgId}-hit`);
+  const move = e => {
+    const r = svg.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width * W;
+    const t = T0 + (px - M.l) / iw * (T1 - T0);
+    cx.setAttribute("x1", px.toFixed(1)); cx.setAttribute("x2", px.toFixed(1));
+    cx.setAttribute("opacity", "1");
+    let rows = "";
+    for (const a of live) {
+      const pts = DATA[a.key].pts;
+      let p = pts[0];
+      for (const q of pts) { if (q[0] <= t) p = q; else break; }
+      rows += `<div class="row"><i style="background:var(${a.v})"></i>${a.label}<b>${opts.fmt(p[valueIdx])}</b></div>`;
+    }
+    tip.innerHTML = `<div class="th">${hhmm(t)} UTC</div>${rows}`;
+    tip.style.opacity = "1";
+    const wrapR = svg.parentElement.getBoundingClientRect();
+    const left = Math.min(e.clientX - wrapR.left + 14, wrapR.width - tip.offsetWidth - 8);
+    tip.style.left = Math.max(6, left) + "px";
+    tip.style.top = "16px";
+  };
+  hit.addEventListener("pointermove", move);
+  hit.addEventListener("pointerleave", () => { tip.style.opacity = "0"; cx.setAttribute("opacity", "0"); });
+}
+
+function render() {
+  draw("eq", "tip1", 1, { h: 320, baseline: 1000, include: [1000], fill: false,
+    fmt: v => "$" + Math.round(v).toLocaleString("en-US") });
+  draw("dd", "tip2", 2, { h: 260, baseline: 0, include: [0], fill: true,
+    fmt: v => (v < 0 ? "−$" : "$") + Math.round(Math.abs(v)).toLocaleString("en-US") });
+}
+render();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+/* ---- table ---- */
+document.querySelector("#tbl tbody").innerHTML = ARMS.map(a => {
+  const d = DATA[a.key] || {pts:[],n:0,total:0,maxdd:0,peak:0};
+  const on = d.pts.length;
+  return `<tr>
+    <td><span class="sw" style="background:var(${a.v})"></span>${a.label}</td>
+    <td style="text-align:left;color:var(--ink-2);white-space:normal">${a.rule}</td>
+    <td>${d.n}</td>
+    <td>${on ? money(1000 + d.total) : "—"}</td>
+    <td class="${!on ? "idle" : d.total >= 0 ? "up" : "down"}">${on ? money(d.total) : "—"}</td>
+    <td class="${on && d.maxdd < 0 ? "down" : "idle"}">${on ? money(d.maxdd) : "—"}</td>
+    <td>${d.peak ? money(d.peak) : "—"}</td>
+  </tr>`;
+}).join("");
+</script>
