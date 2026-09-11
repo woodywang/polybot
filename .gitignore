@@ -1,0 +1,7 @@
+# run artifacts: regenerable, and the dbs run to tens of MB
+*.db
+*.log
+*.bak
+__pycache__/
+*.db-journal
+.claude/

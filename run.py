@@ -1,0 +1,985 @@
+"""Paper-trade Polymarket 5-minute crypto Up/Down.
+
+Two strategies run side by side on the same feed:
+
+  open  -- take a side when the TWAP-digital fair value beats the ask by more
+           than the taker fee.  This is the directional leg.
+  lock  -- once a side is held, buy the OPPOSITE side later in the window if
+           the two legs together cost less than $1.  That converts an open
+           position into a guaranteed dollar.
+
+The lock is not arbitrage.  Up and Down are complementary, so at any single
+instant ask_up + ask_down >= 1 + spread and buying both costs more than it
+pays.  A pair only comes in under a dollar if the price moved between the two
+legs, which means the lock is just a way of realising a directional gain
+without crossing the spread to sell.  The edge still has to come from the
+model picking the first leg.  The `pairs` table records the simultaneous
+two-sided cost every tick so the run can say how often true arbitrage existed
+(expected answer: never).
+
+Settlement is Chainlink's btc-usd-twap-60s stream, which needs credentials we
+do not have.  Binance and Coinbase are consolidated by median as a stand-in
+for Chainlink's cross-venue aggregation, and the on-chain Chainlink feed is
+polled purely to measure the basis we are carrying.
+
+No orders are sent.
+"""
+import argparse, asyncio, json, sqlite3, statistics, time, urllib.request
+from collections import deque
+
+import websockets
+import fair
+
+GAMMA = "https://gamma-api.polymarket.com/markets"
+BINANCE = "wss://stream.binance.com:9443/stream?streams="
+COINBASE = "wss://ws-feed.exchange.coinbase.com"
+POLY_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+RPC = "https://polygon.drpc.org"
+CL_FEED = {"btc": "0xc907E116054Ad103354f2D350FD2514433D57F6f"}   # BTC/USD, 8dp
+UA = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+WIN = 300                        # 5-minute markets
+HIST = 420                       # seconds of tape to keep
+TWAP_W = 60.0                    # chainlink twap-60s stream
+BN = {"btc": "btcusdt", "eth": "ethusdt", "sol": "solusdt",
+      "xrp": "xrpusdt", "doge": "dogeusdt", "bnb": "bnbusdt"}
+CB = {"btc": "BTC-USD", "eth": "ETH-USD", "sol": "SOL-USD",
+      "xrp": "XRP-USD", "doge": "DOGE-USD"}
+
+DDL = """
+CREATE TABLE IF NOT EXISTS markets(
+  slug TEXT PRIMARY KEY, asset TEXT, start_ts INT, tok_up TEXT, tok_dn TEXT,
+  strike REAL, outcome TEXT);
+CREATE TABLE IF NOT EXISTS regime(
+  slug TEXT PRIMARY KEY, er1 REAL, er5 REAL, rng1 REAL, path1 REAL);
+CREATE TABLE IF NOT EXISTS obs(
+  ts REAL, slug TEXT, kind TEXT, tau REAL, spot REAL, strike REAL, sigma REAL,
+  fair_up REAL, naive_up REAL, side TEXT, ask REAL, depth REAL, edge REAL,
+  fill_px REAL, fill_sz REAL, fee REAL, intens REAL, tps REAL);
+CREATE INDEX IF NOT EXISTS obs_slug ON obs(slug);
+CREATE TABLE IF NOT EXISTS pairs(
+  ts REAL, slug TEXT, tau REAL, ask_up REAL, ask_dn REAL, cost REAL,
+  intens REAL, tps REAL);
+CREATE TABLE IF NOT EXISTS matched(
+  ts REAL, slug TEXT, shares REAL, cost_open REAL, cost_lock REAL, pair REAL);
+CREATE TABLE IF NOT EXISTS basis(
+  ts REAL, asset TEXT, venue REAL, chainlink REAL, bps REAL);
+"""
+
+
+def gamma(slugs, closed=None):
+    if not slugs:
+        return []
+    q = "&".join(f"slug={s}" for s in slugs)
+    if closed is not None:
+        q += f"&closed={'true' if closed else 'false'}"
+    try:
+        req = urllib.request.Request(f"{GAMMA}?{q}", headers=UA)
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.load(r)
+    except Exception:
+        return []
+
+
+class Book:
+    """Snapshot from `book`, then per-level deltas from `price_change`.
+
+    The delta envelope has no asset_id -- it lives on each entry, and the field
+    is `price_changes`, not `changes`.  Get either wrong and the book silently
+    freezes on its opening snapshot while every quote read goes stale.
+    """
+    __slots__ = ("bids", "asks", "hint")
+
+    def __init__(self):
+        self.bids, self.asks, self.hint = {}, {}, None
+
+    def snapshot(self, msg):
+        self.bids = {float(x["price"]): float(x["size"]) for x in msg.get("bids", [])}
+        self.asks = {float(x["price"]): float(x["size"]) for x in msg.get("asks", [])}
+
+    def level(self, c):
+        side = self.bids if c.get("side") == "BUY" else self.asks
+        px, sz = float(c["price"]), float(c["size"])
+        if sz <= 0:
+            side.pop(px, None)
+        else:
+            side[px] = sz
+        if c.get("best_ask") not in (None, ""):
+            self.hint = float(c["best_ask"])
+
+    def best_ask(self):
+        live = [p for p, s in self.asks.items() if s > 0]
+        if self.hint is not None:
+            live = [p for p in live if p >= self.hint]
+        if not live:
+            return (self.hint, 0.0) if self.hint else (None, 0.0)
+        p = min(live)
+        return p, self.asks[p]
+
+
+class State:
+    def __init__(self, a):
+        self.cfg = a
+        self.ticks = {k: deque(maxlen=400_000) for k in a.assets}
+        self.flow = {k: deque(maxlen=400_000) for k in a.assets}   # (ts, notional)
+        self.venue = {k: {} for k in a.assets}      # asset -> venue -> last px
+        self.markets, self.books = {}, {}
+        self.db = sqlite3.connect(a.db)
+        self.db.executescript(DDL)
+        self.wanted, self.gen = set(), 0
+        self.pos = {}                 # (slug, side) -> [shares, cost_incl_fee]
+        self.lots = {}                # (slug, side) -> deque([shares, cost/share])
+        self.pending = set()          # (slug, side) with a fill in flight
+        self.kl = {k: {} for k in a.assets}        # asset -> interval -> closes
+
+    def push(self, asset, venue, ts, px, qty=0.0):
+        """Consolidate venues by median -- Chainlink aggregates across spot
+        venues, so a single exchange carries a basis the model cannot see."""
+        self.venue[asset][venue] = px
+        q = self.ticks[asset]
+        q.append((ts, statistics.median(self.venue[asset].values())))
+        cut = ts - HIST
+        while q and q[0][0] < cut:
+            q.popleft()
+        f = self.flow[asset]
+        f.append((ts, px * qty))
+        while f and f[0][0] < cut:
+            f.popleft()
+
+    def intensity(self, asset, recent=60.0, base=420.0):
+        """Trade arrival rate over the last `recent` seconds relative to its
+        own baseline.  Under the mixture-of-distributions view variance per
+        unit time scales with the trade arrival rate, so sqrt of this is the
+        natural multiplier on a trailing sigma to make it forward looking.
+        Returns (rate_ratio, notional_ratio, trades_per_sec)."""
+        f = self.flow[asset]
+        if not f:
+            return 1.0, 1.0, 0.0
+        now = f[-1][0]
+        rn = [x for x in f if x[0] >= now - recent]
+        bn = [x for x in f if x[0] >= now - base]
+        if len(rn) < 20 or len(bn) < 60:
+            return 1.0, 1.0, len(rn) / recent
+        span = max(bn[-1][0] - bn[0][0], 1.0)
+        r_cnt = (len(rn) / recent) / max(len(bn) / span, 1e-9)
+        r_not = (sum(x[1] for x in rn) / recent) / \
+                max(sum(x[1] for x in bn) / span, 1e-9)
+        return r_cnt, r_not, len(rn) / recent
+
+    def spot(self, asset):
+        t = self.ticks[asset]
+        return t[-1][1] if t else None
+
+    def px_at(self, asset, when):
+        prev = None
+        for ts, px in self.ticks[asset]:
+            if ts > when:
+                break
+            prev = px
+        return prev
+
+    def integral(self, asset, t0, t1):
+        """Trapezoid of price over [t0, t1]; the printed part of the TWAP."""
+        pts = [(ts, px) for ts, px in self.ticks[asset] if t0 <= ts <= t1]
+        head = self.px_at(asset, t0)
+        if head is not None:
+            pts.insert(0, (t0, head))
+        if not pts:
+            return None
+        if pts[-1][0] < t1:
+            pts.append((t1, pts[-1][1]))
+        return sum((b[0] - a[0]) * (a[1] + b[1]) / 2 for a, b in zip(pts, pts[1:]))
+
+    def held(self, slug, side):
+        return self.pos.get((slug, side), [0.0, 0.0])
+
+    def lots_of(self, slug, side):
+        return self.lots.setdefault((slug, side), deque())
+
+    def unmatched(self, slug, side):
+        return sum(l[0] for l in self.lots_of(slug, side))
+
+    def fifo_basis(self, slug, side):
+        """Cost of the next share we would hedge.
+
+        Deliberately NOT the running average.  The open strategy keeps adding
+        to a position after part of it has been hedged, and averaging lets
+        those later, worse fills leak backwards into pairs that were already
+        locked -- which is how a run with min_lock=1.5c still ended up paying
+        $1.0084 per dollar.  Lots are consumed FIFO and retired on match."""
+        q = self.lots_of(slug, side)
+        return q[0][1] if q else None
+
+    def take_lots_peek(self, slug, side, n):
+        """What take_lots would return, without consuming anything."""
+        got, cost = 0.0, 0.0
+        for sh, cps in self.lots_of(slug, side):
+            if got >= n - 1e-12:
+                break
+            use = min(sh, n - got)
+            got += use
+            cost += use * cps
+        return got, cost
+
+    def take_lots(self, slug, side, n):
+        """Peel n shares FIFO, returning their total cost."""
+        q, got, cost = self.lots_of(slug, side), 0.0, 0.0
+        while q and got < n - 1e-12:
+            sh, cps = q[0]
+            use = min(sh, n - got)
+            got += use
+            cost += use * cps
+            if use >= sh - 1e-12:
+                q.popleft()
+            else:
+                q[0][0] -= use
+        return got, cost
+
+
+# --------------------------------------------------------------- feeds
+async def feed_binance(st):
+    url = BINANCE + "/".join(f"{BN[a]}@trade" for a in st.cfg.assets)
+    rev = {BN[a]: a for a in st.cfg.assets}
+    while True:
+        try:
+            async with websockets.connect(url, ping_interval=20) as ws:
+                print("[binance] connected", flush=True)
+                async for raw in ws:
+                    m = json.loads(raw)
+                    d = m.get("data", m)
+                    a = rev.get(m.get("stream", "").split("@")[0])
+                    if a and "p" in d:
+                        st.push(a, "binance", d["T"] / 1000.0, float(d["p"]),
+                                float(d.get("q", 0)))
+        except Exception as e:
+            print(f"[binance] {type(e).__name__}: {e}; retry", flush=True)
+            await asyncio.sleep(2)
+
+
+async def feed_coinbase(st):
+    prods = [CB[a] for a in st.cfg.assets if a in CB]
+    rev = {CB[a]: a for a in st.cfg.assets if a in CB}
+    while True:
+        try:
+            async with websockets.connect(COINBASE, ping_interval=20) as ws:
+                await ws.send(json.dumps({"type": "subscribe",
+                                          "product_ids": prods,
+                                          "channels": ["matches"]}))
+                print(f"[coinbase] subscribed {prods}", flush=True)
+                async for raw in ws:
+                    m = json.loads(raw)
+                    if m.get("type") == "match" and m.get("price"):
+                        a = rev.get(m.get("product_id"))
+                        if a:
+                            st.push(a, "coinbase", time.time(), float(m["price"]),
+                                    float(m.get("size", 0)))
+        except Exception as e:
+            print(f"[coinbase] {type(e).__name__}: {e}; retry", flush=True)
+            await asyncio.sleep(3)
+
+
+def regime_of(closes):
+    """Two orthogonal numbers from one candle series.
+
+      er    = |net move| / path walked -- DIRECTION.  1 = clean trend, 0 = chop.
+      path  = total distance walked, in bps -- AMPLITUDE.
+
+    One alone is not enough: a market can drift 5bps with er=1 (nothing to
+    trade) or swing 200bps with er=0 (everything to trade).  The two strategies
+    want opposite corners of this grid -- the directional leg wants high er,
+    the sequential lock wants low er with a long path, because it needs the
+    implied probability to visit both extremes inside one window.
+    """
+    if len(closes) < 3:
+        return None, None
+    path = sum(abs(b - a) for a, b in zip(closes, closes[1:]))
+    if path <= 0 or closes[-1] <= 0:
+        return 0.0, 0.0
+    return abs(closes[-1] - closes[0]) / path, path / closes[-1] * 1e4
+
+
+def _klines(sym, interval, limit):
+    u = (f"https://api.binance.com/api/v3/klines?symbol={sym.upper()}"
+         f"&interval={interval}&limit={limit}")
+    req = urllib.request.Request(u, headers=UA)
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return [float(k[4]) for k in json.load(r)]        # closes
+
+
+async def poll_klines(st):
+    """Regime context the tick tape cannot give: we only keep 7 minutes of
+    ticks, and a trend/chop read needs an hour."""
+    while True:
+        for a in st.cfg.assets:
+            for iv, n in (("1m", 60), ("5m", 36)):
+                try:
+                    st.kl[a][iv] = await asyncio.to_thread(_klines, BN[a], iv, n)
+                except Exception:
+                    pass
+        await asyncio.sleep(30)
+
+
+def _chainlink(addr):
+    """latestRoundData() -> (roundId, answer, startedAt, updatedAt, ...)."""
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_call",
+                       "params": [{"to": addr, "data": "0xfeaf968c"}, "latest"]})
+    req = urllib.request.Request(RPC, data=body.encode(),
+                                 headers={"Content-Type": "application/json",
+                                          "User-Agent": UA["User-Agent"]})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        res = json.load(r).get("result", "")
+    if len(res) < 2 + 64 * 2:
+        return None
+    raw = int(res[2 + 64:2 + 128], 16)
+    if raw >= 1 << 255:
+        raw -= 1 << 256
+    return raw / 1e8                       # feed has 8 decimals
+
+
+async def poll_chainlink(st):
+    """Diagnostic only.  This is the 27s-heartbeat price feed, not the
+    twap-60s stream Polymarket settles on, so it is far too slow to trade.
+    It is here to measure the basis our consolidated spot is carrying."""
+    while True:
+        for a, addr in CL_FEED.items():
+            if a not in st.cfg.assets:
+                continue
+            try:
+                cl = await asyncio.to_thread(_chainlink, addr)
+                sp = st.spot(a)
+                if cl and sp:
+                    st.db.execute("INSERT INTO basis VALUES(?,?,?,?,?)",
+                                  (time.time(), a, sp, cl, (sp - cl) / cl * 1e4))
+                    st.db.commit()
+            except Exception:
+                pass
+        await asyncio.sleep(15)
+
+
+async def feed_books(st):
+    while True:
+        toks, gen = sorted(st.wanted), st.gen
+        if not toks:
+            await asyncio.sleep(1)
+            continue
+        try:
+            async with websockets.connect(POLY_WS, ping_interval=None) as ws:
+                await ws.send(json.dumps({"assets_ids": toks, "type": "market"}))
+                print(f"[poly] subscribed {len(toks)} tokens", flush=True)
+
+                async def ping():
+                    while True:
+                        await asyncio.sleep(10)
+                        await ws.send("PING")
+
+                pt = asyncio.create_task(ping())
+                try:
+                    while st.gen == gen:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=30)
+                        if raw == "PONG":
+                            continue
+                        msgs = json.loads(raw)
+                        for m in msgs if isinstance(msgs, list) else [msgs]:
+                            et = m.get("event_type")
+                            if et == "book" and m.get("asset_id"):
+                                st.books.setdefault(m["asset_id"], Book()).snapshot(m)
+                            elif et == "price_change":
+                                for c in m.get("price_changes", []):
+                                    if c.get("asset_id"):
+                                        st.books.setdefault(
+                                            c["asset_id"], Book()).level(c)
+                finally:
+                    pt.cancel()
+        except Exception as e:
+            print(f"[poly] {type(e).__name__}: {e}; retry", flush=True)
+            await asyncio.sleep(2)
+
+
+# ---------------------------------------------------------- market plumbing
+async def discover(st):
+    """Slugs are deterministic: {asset}-updown-5m-{window_start}."""
+    while True:
+        now = time.time()
+        base = int(now // WIN) * WIN
+        slugs = [f"{a}-updown-5m-{base + k * WIN}"
+                 for a in st.cfg.assets for k in (0, 1, 2)]
+        new = [s for s in slugs if s not in st.markets]
+        for m in await asyncio.to_thread(gamma, new, False):
+            slug = m["slug"]
+            toks = json.loads(m["clobTokenIds"])
+            st.markets[slug] = dict(asset=slug.split("-")[0],
+                                    start=int(slug.split("-")[-1]),
+                                    up=toks[0], dn=toks[1], strike=None)
+        live = {t for s, mk in st.markets.items() for t in (mk["up"], mk["dn"])
+                if mk["start"] + WIN > now - 30}
+        if live != st.wanted:
+            st.wanted, st.gen = live, st.gen + 1
+        for slug in [s for s, mk in st.markets.items()
+                     if mk["start"] + WIN < now - 600]:
+            del st.markets[slug]
+        await asyncio.sleep(15)
+
+
+async def resolve(st):
+    while True:
+        rows = st.db.execute(
+            "SELECT slug, start_ts FROM markets WHERE outcome IS NULL").fetchall()
+        due = [s for s, t in rows if time.time() > t + WIN + 120]
+        got = 0
+        # One slug per request: gamma silently returns [] when several slug
+        # params are combined with closed=true, which reads as "nothing has
+        # settled yet" forever.  Polymarket also flips `closed` about 4-6
+        # minutes after the window ends, so passes before that find nothing.
+        for slug in due:
+            for m in await asyncio.to_thread(gamma, [slug], True):
+                pr = json.loads(m.get("outcomePrices") or "[]")
+                if len(pr) == 2 and {pr[0], pr[1]} == {"1", "0"}:
+                    st.db.execute("UPDATE markets SET outcome=? WHERE slug=?",
+                                  ("Up" if pr[0] == "1" else "Down", m["slug"]))
+                    got += 1
+        st.db.commit()
+        if got:
+            print(f"[resolve] open={len(rows)} due={len(due)} settled={got}",
+                  flush=True)
+        await asyncio.sleep(60)
+
+
+# --------------------------------------------------------------- trading
+def log(st, kind, slug, snap, side, ask, depth, ed, sz=None):
+    fee = fair.taker_fee(ask, sz) if sz else None
+    st.db.execute("INSERT INTO obs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (time.time(), slug, kind, snap["tau"], snap["spot"],
+                   snap["strike"], snap["sigma"], snap["fair_up"],
+                   snap["naive_up"], side, ask, depth, ed,
+                   ask if sz else None, sz, fee,
+                   snap.get("intens"), snap.get("tps")))
+    if sz:
+        p = st.pos.setdefault((slug, side), [0.0, 0.0])
+        p[0] += sz
+        p[1] += ask * sz + fee
+        cps = ask + fee / sz
+        if kind == "open":
+            st.lots_of(slug, side).append([sz, cps])
+        else:                                    # lock: retire the pair
+            other = "Down" if side == "Up" else "Up"
+            got, c_open = st.take_lots(slug, other, sz)
+            if got > 0:
+                st.db.execute("INSERT INTO matched VALUES(?,?,?,?,?,?)",
+                              (time.time(), slug, got, c_open, cps * got,
+                               c_open + cps * got))
+
+
+async def fill(st, kind, slug, side, tok, snap, cap):
+    """Wait out the round trip, then fill at whatever the book actually is.
+    This is the whole difference between a backtest and a fantasy."""
+    try:
+        await asyncio.sleep(st.cfg.latency_ms / 1000.0)
+        ask, depth = st.books.get(tok, Book()).best_ask()
+        if ask is None or depth <= 0:
+            return
+        if kind == "open":
+            ed = fair.edge(snap["fair"], ask)
+            if ed <= 0 or ask > st.cfg.max_price:
+                return
+            room = st.cfg.max_per_market - st.held(slug, side)[1]
+            stake = min(st.cfg.max_usd,
+                        kelly_usd(snap["fair"], ask, st.cfg.bankroll,
+                                  st.cfg.kelly) if st.cfg.kelly > 0
+                        else st.cfg.max_usd)
+            sz = min(stake / ask, depth, max(room, 0.0) / ask)
+        else:                                    # lock
+            ed = 1.0 - cap - ask - fair.taker_fee(ask)
+            if ed < st.cfg.min_lock:
+                return                           # the move went away
+            sz = min(st.cfg.max_usd / ask, depth, cap_shares(st, slug, side))
+            if sz > 0:          # re-price against the exact lots we will consume
+                _, c = st.take_lots_peek(slug,
+                                         "Down" if side == "Up" else "Up", sz)
+                if 1.0 - (c / sz) - ask - fair.taker_fee(ask) < st.cfg.min_lock:
+                    return
+        if sz > 0:
+            log(st, kind, slug, snap, side, ask, depth, ed, sz)
+            st.db.commit()
+    finally:
+        st.pending.discard((slug, side))
+
+
+def kelly_usd(p, ask, bankroll, frac):
+    """Fractional Kelly stake for a binary paying $1 at price `ask`.
+
+    Net odds b = (1-ask)/ask, so f* = (p*(1+b) - 1)/b collapses to
+    (p - ask)/(1 - ask).  Full Kelly is far too hot when p is a model output
+    rather than a known probability -- a small bias in p blows the account up
+    -- so this is always scaled by `frac`.
+    """
+    if not (0.0 < ask < 1.0) or p <= ask:
+        return 0.0
+    return max((p - ask) / (1.0 - ask) * frac * bankroll, 0.0)
+
+
+def cap_shares(st, slug, side):
+    """Never buy more of the hedge than there are unmatched shares to cover."""
+    other = "Down" if side == "Up" else "Up"
+    return st.unmatched(slug, other)
+
+
+async def strategy(st):
+    last = {}
+    while True:
+        now = time.time()
+        for slug, mk in list(st.markets.items()):
+            # strike = the settlement source's value at the window open.  That
+            # source is a twap-60s stream, so the value it publishes on the
+            # boundary is the mean of the preceding minute, not the tick on it.
+            # Sampling spot here was wrong by a minute of drift, and because
+            # the model's variance collapses as tau^3 that error came back as
+            # confident, losing trades.
+            if mk["strike"] is None and mk["start"] <= now < mk["start"] + 2:
+                i0 = st.integral(mk["asset"], mk["start"] - TWAP_W, mk["start"])
+                if i0:
+                    mk["strike"] = i0 / TWAP_W
+                    st.db.execute(
+                        "INSERT OR REPLACE INTO markets VALUES(?,?,?,?,?,?,NULL)",
+                        (slug, mk["asset"], mk["start"], mk["up"], mk["dn"],
+                         mk["strike"]))
+                    k1 = st.kl[mk["asset"]].get("1m") or []
+                    k5 = st.kl[mk["asset"]].get("5m") or []
+                    mk["er1"], mk["path1"] = regime_of(k1[-30:])
+                    er5, _ = regime_of(k5[-12:])
+                    rng = (max(k1[-30:]) - min(k1[-30:])) / mk["strike"] * 1e4 \
+                        if len(k1) >= 30 else None
+                    st.db.execute("INSERT OR REPLACE INTO regime VALUES(?,?,?,?,?)",
+                                  (slug, mk["er1"], er5, rng, mk["path1"]))
+                    st.db.commit()
+
+            k, tau = mk["strike"], mk["start"] + WIN - now
+            if k is None or not (0 < tau < WIN):
+                continue
+            spot = st.spot(mk["asset"])
+            if spot is None:
+                continue
+
+            sig_tr = fair.realized_sigma(list(st.ticks[mk["asset"]]))
+            r_cnt, r_not, tps = st.intensity(mk["asset"])
+            # Trailing sigma answers "how volatile was it"; pricing needs "how
+            # volatile will the remaining tau be".  Trade intensity is the
+            # standard bridge: variance per unit time tracks the arrival rate,
+            # so sigma scales with its square root.  Clipped, because a thin
+            # baseline can make the ratio explode.
+            scale = min(max(r_cnt ** 0.5, 0.6), 2.0) if st.cfg.vol_scale else 1.0
+            sigma = sig_tr * scale
+            w = st.cfg.twap_w
+            ik = st.integral(mk["asset"], mk["start"] + WIN - w, now) or 0.0 \
+                if tau < w else 0.0
+            p_up = fair.fair_up(spot, k, tau, sigma, w, ik)
+            naive = fair.fair_up_naive(spot, k, tau, sigma)
+            snap = dict(tau=tau, spot=spot, strike=k, sigma=sigma,
+                        fair_up=p_up, naive_up=naive, intens=r_not, tps=tps)
+
+            a_up, d_up = st.books.get(mk["up"], Book()).best_ask()
+            a_dn, d_dn = st.books.get(mk["dn"], Book()).best_ask()
+
+            # How much would both sides cost RIGHT NOW, fees included?  They are
+            # complementary tokens, so this should never be under a dollar.
+            # Recorded rather than assumed.
+            if a_up and a_dn:
+                cost = a_up + a_dn + fair.taker_fee(a_up) + fair.taker_fee(a_dn)
+                st.db.execute("INSERT INTO pairs VALUES(?,?,?,?,?,?,?,?)",
+                              (now, slug, tau, a_up, a_dn, cost, r_not, tps))
+
+            for side, tok, p, ask, depth in (
+                    ("Up", mk["up"], p_up, a_up, d_up),
+                    ("Down", mk["dn"], 1 - p_up, a_dn, d_dn)):
+                if ask is None or depth <= 0 or (slug, side) in st.pending:
+                    continue
+
+                # --- confidence haircut: the random-walk null says the book is
+                # the consensus estimate and our p is one noisy model's opinion.
+                # Shrinking toward the book's own implied price before sizing
+                # keeps a mis-estimated sigma from turning into a large bet.
+                mkt = (a_up + (1.0 - a_dn)) / 2.0 if (a_up and a_dn) else p
+                if side == "Down":
+                    mkt = 1.0 - mkt
+                p = fair.shrink(p, mkt, st.cfg.shrink)
+                snap["fair"] = p
+
+                # --- can a hedge realistically appear before the window shuts?
+                # A lock needs the opposite side to fall to a_max.  Translate
+                # that into the spot distance required, then price the odds of
+                # travelling it with the reflection principle.  Legs opened when
+                # this is near zero are naked bets wearing a hedge's clothes.
+                a_max = 1.0 - (ask + fair.taker_fee(ask)) - st.cfg.min_lock
+                if a_max <= 0:
+                    p_lock = 0.0
+                else:
+                    dist = fair.needed_move(p, 1.0 - a_max, sigma, tau, w)
+                    p_lock = fair.p_touch(dist, sigma, tau)
+
+                # --- lock: we are long the other side, can we finish the pair
+                # under a dollar?  Allowed regardless of what the model thinks,
+                # because completing it is a guaranteed payout.
+                need = cap_shares(st, slug, side)
+                if need > 0:
+                    other = "Down" if side == "Up" else "Up"
+                    basis = st.fifo_basis(slug, other)
+                    if basis is None:
+                        continue
+                    # Holding the open leg is worth `p_other` per share; locking
+                    # is worth 1 - basis - ask - fee.  Locking therefore only
+                    # beats holding when 1 - ask - fee > p_other, i.e. when the
+                    # hedge leg is itself a positive-edge trade.  The old rule
+                    # only asked whether the pair came in under $1, which fires
+                    # on winners too and flattens a 74%-accurate signal into a
+                    # flat few percent.
+                    cheap = 1.0 - basis - ask - fair.taker_fee(ask) >= st.cfg.min_lock
+                    plus = fair.edge(p, ask) > st.cfg.min_edge
+                    want = {"cost": cheap, "edge": plus,
+                            "both": cheap and plus}[st.cfg.lock_mode]
+                    if want:
+                        st.pending.add((slug, side))
+                        asyncio.create_task(
+                            fill(st, "lock", slug, side, tok, dict(snap), basis))
+                        continue
+
+                # --- open: directional, and only with enough of the window
+                # left for the price to move far enough to lock it.
+                ed = fair.edge(p, ask)
+                room = st.cfg.max_per_market - st.held(slug, side)[1]
+                if (ed > st.cfg.min_edge and ask <= st.cfg.max_price
+                        and room > 0 and tau > st.cfg.min_tau_open
+                        and r_not >= st.cfg.min_intensity
+                        and st.cfg.er_min <= (mk.get("er1") or 0.5)
+                                          <= st.cfg.er_max
+                        and (mk.get("path1") or 99) >= st.cfg.path_min
+                        and p_lock >= st.cfg.min_p_lock):
+                    st.pending.add((slug, side))
+                    asyncio.create_task(
+                        fill(st, "open", slug, side, tok, dict(snap), 0.0))
+
+                key = (slug, side)
+                if now - last.get(key, 0) > 20:
+                    last[key] = now
+                    log(st, "sample", slug, snap, side, ask, depth, ed)
+        st.db.commit()
+        await asyncio.sleep(st.cfg.tick_ms / 1000.0)
+
+
+async def heartbeat(st):
+    while True:
+        await asyncio.sleep(60)
+        q = lambda s: st.db.execute(s).fetchone()[0]
+        print(f"[hb] mk={len(st.markets)} tok={len(st.wanted)} "
+              f"open={q('SELECT COUNT(*) FROM obs WHERE kind=\"open\"')} "
+              f"lock={q('SELECT COUNT(*) FROM obs WHERE kind=\"lock\"')} "
+              f"res={q('SELECT COUNT(*) FROM markets WHERE outcome IS NOT NULL')}",
+              flush=True)
+
+
+async def main(a):
+    st = State(a)
+    jobs = [feed_binance(st), feed_books(st), discover(st), resolve(st),
+            strategy(st), heartbeat(st)]
+    if not a.no_coinbase:
+        jobs.append(feed_coinbase(st))
+    if not a.no_chainlink:
+        jobs.append(poll_chainlink(st))
+    jobs.append(poll_klines(st))
+    await asyncio.gather(*jobs)
+
+
+# ---------------------------------------------------------------- report
+def report(a):
+    import math
+    db = sqlite3.connect(a.db)
+    res = dict(db.execute(
+        "SELECT slug, outcome FROM markets WHERE outcome IS NOT NULL").fetchall())
+    print(f"resolved markets: {len(res)}")
+    if not res:
+        return print("nothing resolved yet -- let it run longer")
+
+    rows = [r for r in db.execute(
+        "SELECT slug,kind,side,fair_up,naive_up,fill_px,fill_sz,fee FROM obs")
+        if r[0] in res]
+
+    for name, col in (("twap ", 3), ("naive", 4)):
+        ll = n = 0
+        for r in rows:
+            if r[1] != "sample":
+                continue
+            p = min(max(r[col], 1e-6), 1 - 1e-6)
+            y = 1.0 if res[r[0]] == "Up" else 0.0
+            ll -= y * math.log(p) + (1 - y) * math.log(1 - p)
+            n += 1
+        print(f"{name} log-loss {ll/max(n,1):.4f}  over {n:,} samples")
+
+    print("\ncalibration (twap model, Up leg)")
+    bk = {}
+    for r in rows:
+        if r[1] != "sample":
+            continue
+        b = min(int(r[3] * 10), 9)
+        h, t = bk.get(b, (0, 0))
+        bk[b] = (h + (res[r[0]] == "Up"), t + 1)
+    for b in sorted(bk):
+        h, t = bk[b]
+        print(f"  p {b/10:.1f}-{b/10+0.1:.1f}  n={t:>5,}  actual={h/t:.3f}"
+              f"{'   OVER' if h/t < b/10 else ''}")
+
+    # --- position level P&L: matched pairs pay exactly $1, the rest is naked
+    pos = {}
+    for slug, kind, side, *_ , px, sz, fee in rows:
+        if kind == "sample" or not sz:
+            continue
+        p = pos.setdefault(slug, {"Up": [0.0, 0.0], "Down": [0.0, 0.0],
+                                  "nlock": 0, "nopen": 0})
+        p[side][0] += sz
+        p[side][1] += px * sz + fee
+        p["nlock" if kind == "lock" else "nopen"] += 1
+
+    # Pairs come from the `matched` ledger, written at lock time against the
+    # exact FIFO lots consumed.  Recomputing them from average cost lets later
+    # opens leak backwards into already-hedged shares.
+    mt = {}
+    for slug, sh, pair in db.execute(
+            "SELECT slug, shares, pair FROM matched"):
+        if slug in res:
+            e = mt.setdefault(slug, [0.0, 0.0])
+            e[0] += sh
+            e[1] += pair
+
+    tot = dict(pair_n=0, pair_cost=0.0, pair_pay=0.0, naked_cost=0.0,
+               naked_pay=0.0, naked_n=0, win=0, mkts=0, opens=0, locks=0)
+    for slug, p in pos.items():
+        tot["mkts"] += 1
+        tot["opens"] += p["nopen"]
+        tot["locks"] += p["nlock"]
+        m, cost = mt.get(slug, [0.0, 0.0])
+        if m > 0:                                  # hedged pairs -> $1 each
+            tot["pair_n"] += m
+            tot["pair_cost"] += cost
+            tot["pair_pay"] += m
+        for side in ("Up", "Down"):                # leftover directional
+            held = p[side]
+            extra = held[0] - m
+            if extra > 1e-9 and held[0] > 0:
+                tot["naked_cost"] += held[1] / held[0] * extra
+                tot["naked_n"] += 1
+                if res[slug] == side:
+                    tot["naked_pay"] += extra
+                    tot["win"] += 1
+
+    pp = tot["pair_pay"] - tot["pair_cost"]
+    np_ = tot["naked_pay"] - tot["naked_cost"]
+    print(f"\nmarkets traded {tot['mkts']}   open legs {tot['opens']}   "
+          f"lock legs {tot['locks']}")
+    print(f"  hedged pairs  {tot['pair_n']:>9,.1f} sh  cost ${tot['pair_cost']:>9,.2f}"
+          f"  payout ${tot['pair_pay']:>9,.2f}  P&L ${pp:>+9,.2f}")
+    if tot["pair_n"]:
+        print(f"                cost per $1 pair = ${tot['pair_cost']/tot['pair_n']:.4f}"
+              f"   (under 1.0000 = locked profit)")
+    print(f"  naked residue {tot['naked_n']:>9} legs  cost ${tot['naked_cost']:>9,.2f}"
+          f"  payout ${tot['naked_pay']:>9,.2f}  P&L ${np_:>+9,.2f}"
+          f"   win {tot['win']}/{tot['naked_n']}")
+    stake = tot["pair_cost"] + tot["naked_cost"]
+    print(f"  TOTAL         stake ${stake:,.2f}   NET ${pp+np_:>+,.2f}"
+          f"   ({(pp+np_)/max(stake,1e-9)*100:+.2f}%)")
+
+    # Counterfactual: hold every directional leg to settlement and never hedge.
+    # Locking caps a winner at a few percent while a loser still goes to zero,
+    # so this is the number that says whether hedging is paying for itself.
+    c_cost = c_pay = 0.0
+    hit = shot = 0
+    hsh = lsh = 0.0
+    for slug, kind, side, *_ , px, sz, fee in rows:
+        if kind != "open" or not sz:
+            continue
+        c_cost += px * sz + fee
+        shot += 1
+        if res[slug] == side:
+            c_pay += sz
+            hit += 1
+            hsh += sz
+        else:
+            lsh += sz
+    if shot:
+        print(f"\ncounterfactual -- same open legs, never hedged:")
+        print(f"  direction right {hit}/{shot} legs"
+              f"  ({hsh:,.0f} winning shares vs {lsh:,.0f} losing)")
+        print(f"  stake ${c_cost:,.2f}  payout ${c_pay:,.2f}"
+              f"  NET ${c_pay-c_cost:>+,.2f}"
+              f"  ({(c_pay-c_cost)/max(c_cost,1e-9)*100:+.2f}%)")
+        print(f"  -> hedging changed the result by "
+              f"${(pp+np_)-(c_pay-c_cost):+,.2f}")
+
+    # --- was simultaneous arbitrage ever available?
+    r = db.execute("SELECT COUNT(*), MIN(cost), AVG(cost),"
+                   " SUM(cost<1.0) FROM pairs").fetchone()
+    if r and r[0]:
+        print(f"\nsimultaneous two-sided cost over {r[0]:,} quotes:"
+              f"  min ${r[1]:.4f}  avg ${r[2]:.4f}")
+        print(f"  quotes under $1.00 (true arb): {r[3]:,}"
+              f"  ({r[3]/r[0]*100:.3f}%)")
+
+    # --- was a SEQUENTIAL lock available, and does volume predict it?
+    # Best achievable pair = cheapest all-in Up seen at any instant plus the
+    # cheapest all-in Down seen at any other instant.  Under $1.00 means a
+    # perfectly timed leg-in would have locked a profit in that market.
+    per = {}
+    for slug, au, ad, it in db.execute(
+            "SELECT slug, ask_up, ask_dn, intens FROM pairs"):
+        e = per.setdefault(slug, [9.9, 9.9, [], 0])
+        e[0] = min(e[0], au + fair.taker_fee(au))
+        e[1] = min(e[1], ad + fair.taker_fee(ad))
+        if it:
+            e[2].append(it)
+        e[3] += 1
+    mk = [(v[0] + v[1], statistics.median(v[2]) if v[2] else 1.0)
+          for v in per.values() if v[3] >= 20]
+    if mk:
+        best = [c for c, _ in mk]
+        n_ok = sum(c < 1.0 for c in best)
+        print(f"\nsequential lock, {len(mk)} markets with >=20 quotes:")
+        print(f"  best achievable pair cost: min ${min(best):.4f}"
+              f"  median ${statistics.median(best):.4f}")
+        print(f"  markets where a perfectly timed lock beat $1.00:"
+              f" {n_ok}/{len(mk)} ({n_ok/len(mk)*100:.1f}%)")
+        mk.sort(key=lambda x: x[1])
+        third = max(len(mk) // 3, 1)
+        for lbl, grp in (("low  volume", mk[:third]), ("high volume", mk[-third:])):
+            c = [x[0] for x in grp]
+            print(f"  {lbl}: median pair ${statistics.median(c):.4f}"
+                  f"  lockable {sum(v<1.0 for v in c)}/{len(c)}"
+                  f"  (median intensity {statistics.median([x[1] for x in grp]):.2f})")
+
+    # --- how much of the result is the strategy and how much is the hour?
+    # A single favourable stretch can make any directional rule look brilliant.
+    # Bucketing by wall-clock hour is the cheapest way to see the spread that a
+    # drawdown limit would actually have to survive.
+    starts = dict(db.execute(
+        "SELECT slug, start_ts FROM markets WHERE outcome IS NOT NULL"))
+    hourly = {}
+    for slug, kind, side, *_ , px, sz, fee in rows:
+        if kind != "open" or not sz or slug not in starts:
+            continue
+        h = time.strftime("%m-%d %H:00", time.gmtime(starts[slug]))
+        e = hourly.setdefault(h, [0.0, 0.0, 0, 0, set()])
+        e[0] += px * sz + fee
+        e[4].add(slug)
+        e[3] += 1
+        if res[slug] == side:
+            e[1] += sz
+            e[2] += 1
+    if hourly:
+        print(f"\nby hour (open legs only, unhedged basis)")
+        print(f"  {'hour':<14}{'mkts':>5}{'legs':>6}{'hit':>8}"
+              f"{'stake':>10}{'net':>10}{'return':>9}")
+        rets = []
+        for h in sorted(hourly):
+            c, pay, hit, n, mk_ = hourly[h]
+            r = (pay - c) / max(c, 1e-9) * 100
+            rets.append(r)
+            print(f"  {h:<14}{len(mk_):>5}{n:>6}{hit/max(n,1)*100:>7.0f}%"
+                  f"{c:>10,.0f}{pay-c:>+10,.0f}{r:>8.1f}%")
+        if len(rets) >= 2:
+            print(f"  {'':<14}{'':>5}{'':>6}{'':>8}  spread: "
+                  f"min {min(rets):+.1f}%  max {max(rets):+.1f}%  "
+                  f"stdev {statistics.stdev(rets):.1f} pts")
+
+    # --- which regime actually pays?  Direction and amplitude are separate
+    # axes, so split on both rather than on a single "trendiness" number.
+    reg = dict((r[0], (r[1], r[2])) for r in
+               db.execute("SELECT slug, er1, path1 FROM regime")
+               if r[1] is not None and r[2] is not None)
+    cf = {}
+    for slug, kind, side, *_ , px, sz, fee in rows:
+        if kind != "open" or not sz:
+            continue
+        e = cf.setdefault(slug, [0.0, 0.0])
+        e[0] += px * sz + fee
+        e[1] += sz if res[slug] == side else 0.0
+    live = [(s, reg[s][0], reg[s][1]) for s in cf if s in reg]
+    if len(live) >= 4:
+        me = statistics.median(x[1] for x in live)
+        mp = statistics.median(x[2] for x in live)
+        print(f"\nregime grid ({len(live)} markets; split at er={me:.2f},"
+              f" path={mp:.0f}bps)")
+        print(f"  {'':<22}{'n':>4}{'stake':>10}{'naked P&L':>12}{'return':>9}"
+              f"{'pair cost':>11}")
+        for lbl, sel in (
+                ("chop  / small path", lambda e, p: e <= me and p <= mp),
+                ("chop  / long path ", lambda e, p: e <= me and p > mp),
+                ("trend / small path", lambda e, p: e > me and p <= mp),
+                ("trend / long path ", lambda e, p: e > me and p > mp)):
+            g = [s for s, e, p in live if sel(e, p)]
+            if not g:
+                continue
+            c = sum(cf[s][0] for s in g)
+            pay = sum(cf[s][1] for s in g)
+            pm = [mt[s][1] / mt[s][0] for s in g if s in mt and mt[s][0] > 0]
+            print(f"  {lbl:<22}{len(g):>4}{c:>10,.0f}{pay-c:>+12,.2f}"
+                  f"{(pay-c)/max(c,1e-9)*100:>8.1f}%"
+                  f"{('$%.4f' % statistics.median(pm)) if pm else '-':>11}")
+
+    b = db.execute("SELECT COUNT(*), AVG(bps), MIN(bps), MAX(bps),"
+                   " AVG(ABS(bps)) FROM basis").fetchone()
+    if b and b[0]:
+        print(f"\nconsolidated spot vs on-chain Chainlink, {b[0]:,} samples:"
+              f"  mean {b[1]:+.2f} bps  range [{b[2]:+.1f}, {b[3]:+.1f}]"
+              f"  mean|basis| {b[4]:.2f} bps")
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--assets", default="btc,eth,sol", type=lambda s: s.split(","))
+    p.add_argument("--twap-w", type=float, default=60.0)
+    p.add_argument("--min-edge", type=float, default=0.01,
+                   help="model edge per share, net of fee, to open a leg")
+    p.add_argument("--min-lock", type=float, default=0.015,
+                   help="locked profit per $1 pair required to hedge")
+    p.add_argument("--min-tau-open", type=float, default=45.0,
+                   help="no new naked legs inside this many seconds of close")
+    p.add_argument("--max-usd", type=float, default=25.0, help="per fill")
+    p.add_argument("--max-per-market", type=float, default=60.0)
+    p.add_argument("--max-price", type=float, default=0.95,
+                   help="never lift an ask above this; the tail is model error")
+    p.add_argument("--latency-ms", type=float, default=250.0)
+    p.add_argument("--tick-ms", type=float, default=250.0)
+    p.add_argument("--lock-mode", default="both", choices=["cost", "edge", "both"],
+                   help="cost: pair under $1 (flattens winners). edge: hedge leg "
+                        "must be +EV on its own. both: require each")
+    p.add_argument("--bankroll", type=float, default=1000.0)
+    p.add_argument("--kelly", type=float, default=0.25,
+                   help="Kelly fraction for directional legs; 0 = flat max-usd")
+    p.add_argument("--er-min", type=float, default=0.0,
+                   help="skip markets whose 30x1m efficiency ratio is below this "
+                        "(0.0 = keep chop)")
+    p.add_argument("--er-max", type=float, default=1.0,
+                   help="skip markets above this efficiency ratio "
+                        "(1.0 = keep one-way trends)")
+    p.add_argument("--path-min", type=float, default=0.0,
+                   help="minimum distance walked over 30x1m, in bps -- amplitude "
+                        "filter; a dead tape offers nothing to either strategy")
+    p.add_argument("--min-p-lock", type=float, default=0.0,
+                   help="reflection-principle probability that a hedge becomes "
+                        "available before the window closes; below this an "
+                        "'open' leg is really a naked bet")
+    p.add_argument("--shrink", type=float, default=1.0,
+                   help="weight on the model vs the book's own price when "
+                        "sizing; <1 is a confidence haircut on the model")
+    p.add_argument("--min-intensity", type=float, default=0.0,
+                   help="relative traded notional needed to open a leg; a lock "
+                        "only appears if the price travels, and it travels "
+                        "when the tape is busy. 0 disables the filter")
+    p.add_argument("--vol-scale", type=int, default=1,
+                   help="scale trailing sigma by sqrt(trade intensity)")
+    p.add_argument("--no-coinbase", action="store_true")
+    p.add_argument("--no-chainlink", action="store_true")
+    p.add_argument("--db", default="paper3.db")
+    p.add_argument("--report", action="store_true")
+    a = p.parse_args()
+    if a.report:
+        report(a)
+    else:
+        try:
+            asyncio.run(main(a))
+        except KeyboardInterrupt:
+            print("\nbye")
