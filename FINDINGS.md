@@ -4912,3 +4912,53 @@ twenty times quieter.
 That is the structural reason the project's few near-misses all lived on the
 hourly instrument, and it was visible in the settlement rules from the start
 without anyone having to trade to find it out.
+
+---
+
+## 89. The fill model and the latency measurement agree, which narrows the oldest caveat
+
+Since section 1 this project has carried one standing disclaimer: **no order has
+ever been sent**, so every fill is assumed. Section 86's latency measurement
+lets that be stated much more precisely.
+
+What `fill()` actually does:
+
+```python
+await asyncio.sleep(st.cfg.latency_ms / 1000.0)      # 250ms round trip
+ask, depth = st.books.get(tok, Book()).best_ask()    # re-read the book
+ask = min(ask + st.cfg.slippage, 0.999)              # + 0.130c measured
+```
+
+It waits out a round trip and then fills at **whatever the book is when the order
+lands**, not at the price that triggered the signal. The 0.130c is not a guess
+either — it was measured over 5,356 samples: quotes the model wanted moved
++0.130c against it in 250ms, while quotes it passed on moved 0.343c in its
+favour.
+
+### The two measurements are consistent
+
+Section 86 puts the book's full reaction at **302ms**. The harness fills at
+**250ms**, re-reading the book — so it captures roughly 83% of the repricing and
+pays the rest as measured slippage. That is the correct sign and roughly the
+right size, arrived at independently: the slippage figure came from counting
+book moves in 2026-09, the 302ms from cross-correlating two feeds tonight.
+
+### What is actually still untested
+
+The caveat is narrower than "fills are assumed". Three things are now covered:
+
+- **the price moves before you arrive** — modelled, by re-reading the book
+- **how far it moves** — measured, 0.130c at 250ms
+- **when it finishes moving** — measured, 302ms (§86)
+
+One thing is not: **whether a marketable order at the displayed price is
+accepted at all.** The book being real is established (§62: websocket and REST
+agree on 16 of 16 stale observations). What is unestablished is whether the
+resting size is still there when the order arrives, or has been cancelled by a
+maker who saw the same Binance print.
+
+That is a question only a sent order answers, and it is the one failure mode that
+would make every number in this project optimistic in the same direction. It is
+also, notably, **the mechanism that would explain why a 302ms window is not free
+money** — the makers cancel, and the participant who wins is the one whose order
+arrives before the cancel does.
