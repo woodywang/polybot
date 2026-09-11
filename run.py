@@ -533,8 +533,16 @@ async def discover(st):
             slugs = [hourly_slug(a, base + k * win)
                      for a in st.cfg.assets for k in (0, 1)]
         else:
+            # Only the CURRENT window is ever traded -- the strategy skips any
+            # market whose tau is outside (0, window).  The next one has to be
+            # subscribed in advance so its strike can be captured in the two
+            # seconds after it opens, but the one after that is 5-10 minutes out,
+            # is never traded, and only costs frames.  Each 5-minute token adds
+            # to a stream already running at 867 frames/s, which is what earns
+            # the 1013 slow-consumer close.
             slugs = [f"{a}-updown-5m-{base + k * win}"
-                     for a in st.cfg.assets for k in (0, 1, 2)]
+                     for a in st.cfg.assets
+                     for k in range(max(st.cfg.windows, 1))]
         new = [s for s in slugs if s not in st.markets]
         for m in await asyncio.to_thread(gamma, new, False):
             slug = m["slug"]
@@ -1752,6 +1760,10 @@ if __name__ == "__main__":
                         "equity.  A drawdown limit stops opening but cannot "
                         "stop committed capital from settling against you; "
                         "this is what bounds the overshoot.  0 = uncapped.")
+    p.add_argument("--windows", type=int, default=3,
+                   help="how many 5-minute windows ahead to subscribe. Only the "
+                        "current one trades; the next is needed to catch its "
+                        "strike. 2 is the minimum that loses nothing.")
     p.add_argument("--maker-min-capture", type=float, default=-1.0,
                    help="only post when (mid - post price) is at least this. "
                         "With --maker-improve 1 that means only quoting where "

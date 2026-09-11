@@ -3347,6 +3347,10 @@ only estimate.** That is a reason the book is hard to beat, not a way to beat it
 
 ## 62. The feed fix worked, and it reopens the only surviving hypothesis
 
+> **Overstated — see section 71.** "Zero drops" was a 16-minute window. Over
+> 89 arm-minutes the rate is 0.101/min against 0.222 before: a 55% reduction,
+> not an elimination.
+
 Section 60 removed the client-side receive-queue limit (`max_queue=None`) on the
 grounds that the library's default 32-frame buffer was pushing backpressure onto
 Polymarket's send buffer and earning a `1013 slow consumer` close. Two
@@ -3851,3 +3855,44 @@ unconditional travel.
 Either outcome is informative. The first says making here is a latency race with
 a known finish line; the second says the flow is informed at every queue
 position and the instrument is closed for good.
+
+---
+
+## 71. The feed fix halved the drops, it did not end them
+
+Section 62 reported zero slow-consumer disconnects after setting
+`max_queue=None`. That was a 16-minute window, and at the prior rate it should
+have seen about four. Over a longer run:
+
+```
+                  drops   arm-minutes   rate
+before max_queue     20            90   0.222/min
+after                 9            89   0.101/min
+```
+
+**A 55% reduction, not an elimination.** The claim of zero was true of the
+window I measured and false of the process. Removing client-side backpressure
+lets the consumer absorb bursts; it does not make the consumer faster, and
+867 frames/s with 1,683 level updates still outruns a Python event loop that
+also has to run a strategy pass every 250ms.
+
+Section 69's conclusion survives this, and survives it conservatively: a dropped
+feed makes quotes look **more** stale, not less, so observing a maximum age of
+1.8s across 304 samples *despite* three drops in that arm's lifetime bounds the
+true staleness at or below that.
+
+### The larger lever, which was sitting in plain sight
+
+Each 5-minute arm subscribes to three windows — 18 tokens. The strategy trades a
+market only when `0 < tau < window`, which is the **current** window alone. The
+next one must be subscribed in advance so its strike can be caught in the two
+seconds after it opens. The third is five to ten minutes out, is never traded,
+and exists only to add frames to a stream that is already closing the socket.
+
+`--windows` now controls the lookahead. `paper_fav5` is running at 2 (12 tokens)
+against `paper_dog5` at the default 3 (18 tokens) — same markets, same strategy
+family, different subscription load. The drop rates are the measurement.
+
+That this was found by counting tokens rather than by profiling is the pattern of
+the whole day: **the expensive bugs were all visible in the configuration, and
+none of them were visible in the results they were corrupting.**
