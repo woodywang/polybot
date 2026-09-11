@@ -1170,3 +1170,39 @@ standard deviation of 63% puts the sample needed for t = 2 at **184 markets**
 against the 31 it has. Nothing is concluded.
 
 **Sample insufficient. No parameters changed, no new arm started.**
+
+---
+
+## 26. Re-auditing section 15 on live quotes: that finding goes too
+
+Section 15 reported that when the book disagrees with spot about which side is
+favoured, the book is not merely uninformative but **wrong** — 33.0% win rate,
+−14.53¢ a share. Re-run with the staleness filter:
+
+| | legs | markets | win | net/share | t |
+|---|---|---|---|---|---|
+| **all quotes (the original basis)** | | | | | |
+| agree → buy that side | 3,033 | 146 | 77.6% | +3.28¢ | 1.52 |
+| disagree → buy spot's side | 307 | 63 | 67.1% | −1.47¢ | −0.25 |
+| disagree → buy the book's side | 307 | 63 | **32.9%** | −9.57¢ | −1.67 |
+| **live quotes only (stale < 20s)** | | | | | |
+| agree → buy that side | 2,755 | 142 | 75.9% | +1.50¢ | 0.72 |
+| disagree → buy spot's side | 121 | 56 | **48.8%** | −7.58¢ | −1.22 |
+| disagree → buy the book's side | 121 | 56 | **51.2%** | −4.52¢ | −0.75 |
+
+On quotes that are moving, **the disagreement carries no information at all** —
+51.2% against 48.8% is a coin, and both sides lose after costs. The 33% was the
+stale feed: a frozen quote sits on the wrong side of the strike by construction,
+because the price moved and the quote did not.
+
+The disagreement *rate* itself falls from 9.2% to 4.2%, so **more than half of
+every "disagreement" ever measured here was a stale book**.
+
+The agreement case survives directionally but loses its significance too,
+halving from +3.28¢ (t 1.52) to +1.50¢ (t 0.72).
+
+This is the first systematic re-audit of an old conclusion against the
+staleness filter rather than a new experiment, and it should have come
+immediately after section 19. Every claim in sections 1–17 that rests on quote
+data needs the same treatment; the ones already redone are 14, 16, 17 (retracted
+in 18), the spot/favourite/model comparison (19), and now 15.
