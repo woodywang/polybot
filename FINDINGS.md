@@ -1571,3 +1571,80 @@ in the project, and it is worth being precise about what it claims:
 It still says nothing about whether that beats the **quoted price**, which is
 the only question that pays. The 5-minute model beat the book by a similar
 margin and the whole result was a frozen feed.
+
+---
+
+## 34. The decisive test, run on history: the model does beat the book on hourly markets
+
+Polymarket serves quote history per token (`clob.polymarket.com/prices-history`,
+1-minute fidelity) and hourly settlement is a public Binance candle, so the
+question that could not be answered live is answerable from history. **432
+resolved hourly markets, 25,396 observations**, model and book scored against
+the same outcomes:
+
+| time left | obs | model | book | coin | winner |
+|---|---|---|---|---|---|
+| 2700–3600s | 6,030 | 0.6371 | **0.6358** | 0.6931 | book |
+| 1800–2700s | 6,468 | 0.5562 | **0.5544** | 0.6931 | book |
+| 900–1800s | 6,431 | **0.4065** | 0.4139 | 0.6931 | model |
+| 300–900s | 4,317 | **0.2544** | 0.2618 | 0.6931 | model |
+| 30–300s | 2,150 | **0.1254** | 0.1432 | 0.6931 | model |
+| **all** | 25,396 | **0.4497** | 0.4536 | 0.6931 | model |
+
+The blend is the informative part:
+
+```
+  0% model (pure book)   0.4536
+ 60% model               0.4480   <- best
+100% model               0.4497
+```
+
+**Neither dominates — they carry different information.** That is the opposite
+of the 5-minute case, where 100% model was optimal, and that was the signature
+of a frozen book rather than a good model.
+
+### Trading the disagreement
+
+Buying whichever side the model prefers when it differs from the quote by at
+least 10 points, paying the quoted price plus the real fee and the measured
+slippage, aggregated per market so correlated legs cannot inflate anything:
+
+| split | legs | markets | win | net/share | t |
+|---|---|---|---|---|---|
+| **all** | 2,961 | 412 | 51.5% | **+9.47¢** | **8.49** |
+| tau 1800–3600s | 1,356 | 384 | 50.5% | +5.30¢ | 3.08 |
+| tau 900–1800s | 848 | 284 | 53.3% | +10.18¢ | 5.32 |
+| tau 30–900s | 757 | 205 | 51.3% | +11.01¢ | 6.81 |
+| BTC | 921 | 137 | 58.4% | +9.67¢ | 4.94 |
+| ETH | 989 | 136 | 48.4% | +11.54¢ | 5.77 |
+| SOL | 1,051 | 139 | 48.3% | +7.25¢ | 3.94 |
+| Sep 5–7 | 860 | 138 | 50.7% | +9.13¢ | 4.72 |
+| Sep 7–9 | 980 | 135 | 51.0% | +9.15¢ | 4.77 |
+| Sep 9–11 | 1,121 | 139 | 52.5% | +10.13¢ | 5.17 |
+
+Every split significant, and monotone in the threshold: +4.76¢ at 5 points,
++9.47¢ at 10, +14.64¢ at 15, +22.94¢ at 20.
+
+### It is not the stale-price artifact
+
+The obvious failure mode is that `prices-history` carries a last trade forward,
+so the model "correctly" disagrees with a price nobody is quoting. It does not:
+
+| price unchanged for | obs | markets | net/share | t |
+|---|---|---|---|---|
+| 0–1 min | 2,718 | 405 | **+9.59¢** | 8.58 |
+| 1–3 min | 238 | 177 | +9.44¢ | 2.87 |
+
+Only 0.6% of points are unchanged for five minutes or more, and restricting to
+prices that *just moved* leaves the edge identical. Decisively, the
+disagreement rate **falls** with staleness — 12.3% at zero minutes, 9.4% at one,
+3.6% at two — where the artifact would make it rise.
+
+### What is still unverified
+
+`p` may be a mid or a last trade rather than an executable ask. If it is a mid,
+the real ask sits roughly half a spread higher, and +9.47¢ has that much
+headroom but the figure would shrink. Cross-checking `prices-history` against
+the live book now recording in `paper_hour.db` is the same
+two-independent-sources technique that settled the frozen-book question, and it
+is the next thing to do.

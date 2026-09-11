@@ -10,3 +10,4 @@ queuecheck.json
 stalecheck.json
 equity*.json
 klines30.json
+histtest.json
