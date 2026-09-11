@@ -4962,3 +4962,61 @@ would make every number in this project optimistic in the same direction. It is
 also, notably, **the mechanism that would explain why a 302ms window is not free
 money** — the makers cancel, and the participant who wins is the one whose order
 arrives before the cancel does.
+
+---
+
+## 90. The whole experiment, totalled — and a backfill that poisoned its own record
+
+Every arm, from `--report`:
+
+```
+20 arms    turnover $69,801.97    NET -$280.21    -0.40%
+```
+
+**No order was ever sent.** Every fill is simulated, so nothing here is money
+won or lost — it is 20 experiments, not a portfolio. They overlap heavily (many
+trade the same markets under different rules), so the sum has no financial
+meaning; it is reported because the question "how much did it make" deserves a
+number rather than a deflection.
+
+The two largest arms are the honest data point:
+
+```
+paper_dir    225 markets   $27,620.87 turnover   -1.35%
+paper_lock   222 markets   $34,148.60 turnover   +0.43%
+```
+
+Identical markets, straddling zero on that much turnover. **That is what no edge
+looks like when it is finally measured properly**, and it agrees with the
+per-share figures reached five other ways: taker -2.27c (§65), maker -6.20c
+(§76).
+
+### The error found while totalling
+
+The first version of that table showed `paper_dir` at a **642.1% drawdown** and
+`paper_lock` at 145.4%. A drawdown above 100% is impossible, so the number was
+mine.
+
+Section 59 added the `meta` table so a database records the bankroll it ran
+with, after `--report` had measured drawdown against argparse's default and been
+wrong by 10x. Having built the fix, I then **backfilled twelve pre-existing
+files with `bankroll = 100`** — a value I did not know and had no way to check.
+`paper_dir` turned over $27,620; it was never a $100 account.
+
+I do not know what those arms used. So rather than guess a second time, the
+backfilled value is deleted and replaced with an explicit note that it was never
+recorded. **Their P&L stands** — that is bankroll-independent — **and their
+drawdown percentages are unusable.**
+
+### Third instance of one bug
+
+Sections 59, 75 and this one are the same fault: **state belonging to the
+account was stored in the process.** First the reporting of drawdown, then the
+drawdown *control* which restarts silently reset, and now the repair itself,
+which filled the gap with a number that felt right instead of one that was
+known.
+
+The pattern is worth naming because it survived being explicitly identified
+twice. Knowing that account state must outlive the process did not stop me from
+inventing the account state I was missing. **A reconstruction is only as good as
+the thing it reconstructs from, and "100" came from nowhere.**
