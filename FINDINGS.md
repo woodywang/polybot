@@ -1532,3 +1532,42 @@ The methodological residue is worth more than either result:
 - filtering the signal is not enough, the outcome variable has to be clean too
 - twelve subgroup tests produce two nominal hits at t > 2 by construction
 - verifying a sample of your patches is not verifying them
+
+---
+
+## 33. Thirty days: the model is stable and the calibration bias was noise
+
+Extending the hourly backtest from one week to thirty days — **2,157
+independent hourly outcomes**, 127,185 observations:
+
+| week | hours | Up rate | log-loss | improvement | bias p<0.5 | bias p>0.6 |
+|---|---|---|---|---|---|---|
+| Aug 12 | 504 | 53.8% | 0.4737 | 31.7% | +0.027 | +0.040 |
+| Aug 19 | 504 | 52.6% | 0.4622 | 33.3% | −0.011 | +0.004 |
+| Aug 26 | 504 | 49.8% | 0.4803 | 30.7% | +0.016 | −0.012 |
+| Sep 2 | 504 | 51.4% | 0.4518 | 34.8% | −0.036 | +0.029 |
+| **all** | **2,157** | **51.3%** | **0.4683** | **32.4%** | **−0.002** | **+0.013** |
+
+Two things settle here.
+
+**The calibration bias was noise.** Section 31 measured the model overstating Up
+below even money by up to 0.089 and left it uncorrected on the grounds that
+fitting a drift to one falling week is the overfit that produced six retractions
+in this file. Over thirty days the bias is **−0.002**, and week to week it flips
+sign (+0.027, −0.011, +0.016, −0.036). The one-week base rate of 47.5% is 51.3%
+over the month. Correcting it would have baked a week of noise into the model
+permanently.
+
+**The predictive power is stable, not a regime.** 31.7%, 33.3%, 30.7%, 34.8% —
+four weeks spanning rising and falling markets, all within three points.
+
+At 2,157 independent outcomes this is by a wide margin the best-supported claim
+in the project, and it is worth being precise about what it claims:
+
+> Given spot, the hour's open, time remaining and trailing realised volatility,
+> the model forecasts the Binance hourly candle's direction 32% better than a
+> coin, consistently across a month.
+
+It still says nothing about whether that beats the **quoted price**, which is
+the only question that pays. The 5-minute model beat the book by a similar
+margin and the whole result was a frozen feed.
