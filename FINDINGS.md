@@ -4001,3 +4001,55 @@ addressed neither — it just stopped the client from applying backpressure.
 **Three guesses, one hit, and the hit came from reading the library's defaults
 rather than from reasoning about load.** Worth remembering the next time a
 performance story feels obvious.
+
+---
+
+## 74. Spreading across btc, eth and sol buys almost no diversification
+
+`--max-committed` caps gross open exposure, and gross exposure is the right
+quantity only if the positions are independent. These are not. Outcomes in the
+same window, across 527 settled hours and 88 settled 5-minute windows:
+
+```
+                   hourly (527)     5-minute (88)
+btc / eth agree       85.8%             80.7%
+btc / sol agree       79.7%             88.6%
+eth / sol agree       80.6%             78.4%
+all three identical   73.1%             73.9%      (25% if independent)
+implied rho            0.64              0.65
+```
+
+**Stable across a twelve-fold difference in horizon**, which is what a dominant
+common factor looks like: three crypto Up/Down contracts on the same window are
+three views of one question.
+
+### What it costs
+
+For N positions of size s with pairwise correlation rho, portfolio sd is
+`s * sigma * sqrt(N(1 + (N-1)rho))`. At N=3, rho=0.64 that is 2.62, against 1.73
+if independent:
+
+- Three positions behave like **1.31 independent bets**, not 3.
+- Risk is **1.52x** what the gross exposure suggests under independence.
+- **Holding $3 in each of btc, eth and sol carries 87% of the risk of holding $9
+  in one of them** — the diversification is worth 13%.
+
+### The reframing that matters
+
+`--max-committed 0.25` does not mean "25% of the account, spread across three
+markets". It means **25% of the account in approximately one bet**. That is
+still the right control and the right number — but it was chosen believing the
+25% was diversified, and it is not.
+
+This also explains a pattern the drawdown figures kept showing: `paper_dog5`
+lost $10.03 on one market and $10.03 on the next, and `paper_hour` had a worst
+single market of -$13.03 against a $100 account. Those were not independent
+draws landing badly; they were the same draw, counted three times.
+
+### And it is why the clustering rule exists
+
+Section 43 corrected a t-statistic from +4.00 to +2.48 by clustering on the
+**window** rather than the market, on the argument that btc, eth and sol resolve
+the same five minutes of the same risk asset. That argument was made from first
+principles and is now measured: rho = 0.64. The sqrt(3) correction was, if
+anything, slightly too generous — the effective count is 1.31, not 1.
