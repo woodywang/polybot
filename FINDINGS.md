@@ -4431,3 +4431,60 @@ the `7% x (1-p)` fee.
 
 Which leaves exactly one thing that is *not* in a public price series: how fast
 the book applies what it knows. `latency.py` is measuring that now.
+
+---
+
+## 81. The tick size sets a floor on exploitable latency, and the tail is where it lives
+
+Before the latency measurement lands, the bound can be computed. A stale quote is
+only tradeable if the fair price has moved at least **one tick** while it sat —
+below that, the mispricing has no expressible price on the grid.
+
+Mid travel scales as `sqrt(t)`, so the time for one tick follows from the
+measured travel. My first attempt used the median and produced a clean closure:
+
+```
+5-minute   median travel 2.00c / 10s   ->  1 tick takes 2500 ms
+hourly     median travel 0.50c / 10s   ->  1 tick takes 40 s
+```
+
+Against measured quote ages of 1.80s (stale5) and 1.01s max (observer), that says
+the book is never stale long enough for a one-tick mispricing to form, and the
+hypothesis dies.
+
+**That was wrong, and wrong in a way worth keeping.** A latency trader does not
+operate in the median. Using the distribution:
+
+```
+5-minute mid travel over 10s     1 tick takes
+  median   2.00c                    2500 ms
+  p75      5.00c                     400 ms
+  p90     12.50c                      64 ms
+```
+
+**In the top decile of volatility, one tick of movement takes 64 milliseconds.**
+The book has to reprice inside that to avoid being picked off, and 64ms is
+15-28x tighter than the maximum quote age this project can even measure — its
+sampling is 250ms per strategy tick and 20s per logged sample.
+
+### Which is the whole point
+
+The median case is closed and was never where the money was. A latency edge is
+not a steady trickle; it is a small number of moments when the price gaps and
+whoever sees it first takes the quote that has not moved yet. Those moments are
+exactly the top decile, they are invisible to every instrument here, and they
+are consistent with an account that turns over $1.96M in 14 days at 1.64c a
+share — a thin edge taken very often, or a fat one taken rarely.
+
+Three separate things now point at the same unmeasurable region:
+
+1. The account's fee rate implies it trades at p ~ 0.79, where edge-per-fee is
+   best for a latency taker (§78).
+2. Every feature a public price series contains is already in the quote (§80),
+   leaving only *speed* as a differentiator.
+3. The exploitable window in the volatility tail is ~64ms, four orders of
+   magnitude below this harness's `--max-stale` guard (§81).
+
+None of that is evidence the account is a latency taker. It is evidence that if
+it is, **this setup was never going to see it**, and that is a more useful thing
+to know than another negative result.
