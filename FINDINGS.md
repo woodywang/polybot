@@ -3107,3 +3107,35 @@ near zero. What carries the conclusion is not the significance but the
 **magnitude and the mechanism**: the edge is 1¢, the loss is 15¢, and the
 sold-versus-ahead column says exactly why. An error large enough to reverse this
 would have to be an order of magnitude.
+
+---
+
+## 58. The front-of-queue arm filled four times before any trade happened
+
+Section 57 left one horn of its own argument unmeasured. Behind the queue you
+fill only on sweeps and the markout is -15¢; the escape is to improve the bid by
+a tick and take queue priority. Whether the front of the queue *also* gets picked
+off decides whether making is merely unprofitable or actively adverse at every
+position, so `--maker-improve` was added to post a tick above the touch.
+
+It reported **4 fills in 90 seconds**, against 0 fills in 21 minutes for the
+behind-the-queue arm. A 300-fold swing in fill rate from a one-tick change is
+not a market phenomenon, it is a bug — and it was:
+
+```python
+if o["sold"] < o["ahead"]:
+    return
+```
+
+Improving the bid puts the order at a price where nothing is resting, so
+`ahead = 0`, and `sold >= ahead` is satisfied at `sold = 0`. **The order filled
+before anyone had traded with it.** Fixed with `o["sold"] <= 0 or ...` — a fill
+requires somebody to actually sell to you, at every queue position. Both maker
+arms now report zero fills, which is what a 7.7% fill rate over ten-minute holds
+predicts for a hundred seconds.
+
+Worth noting what caught it: not a test, but the number being too good. A
+strategy that starts filling 300× faster from a one-tick improvement is claiming
+the queue does not exist. **Every artifact this project has found announced
+itself the same way — as an unusually favourable number — and that remains the
+only reliable detector here.**

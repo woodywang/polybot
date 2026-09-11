@@ -715,6 +715,15 @@ def maker_step(st, slug, side, tok, snap, now, mid):
     """
     bk = st.books.get(tok)
     bid, qsz = bk.best_bid() if bk else (None, 0.0)
+    # Section 57: behind a 100-share queue you fill only when someone sweeps,
+    # and markout was -15c against a 1c edge.  Improving the bid by a tick buys
+    # queue priority -- and since the tick and the spread are both 1c, it hands
+    # over the whole gross edge to get it.  This arm measures whether the front
+    # of the queue at least escapes the adverse selection, which decides whether
+    # making is merely unprofitable or actively picked off at every position.
+    if bid is not None and st.cfg.maker_improve:
+        bid = round(bid + 0.01 * st.cfg.maker_improve, 4)
+        qsz = 0.0
     if (bid is None or not st.cfg.min_ask <= mid <= st.cfg.max_price
             or snap["tau"] <= st.cfg.min_tau_open or st.halted):
         st.rest.pop(tok, None)
@@ -734,7 +743,12 @@ def maker_step(st, slug, side, tok, snap, now, mid):
     if abs(mid - o["price"]) > st.cfg.maker_cancel:
         st.rest.pop(tok, None)
         return
-    if o["sold"] < o["ahead"]:
+    # `sold > 0` is not redundant: with --maker-improve the queue ahead is
+    # empty, and `sold >= ahead` is then satisfied at sold = 0 -- the order
+    # fills before any trade has happened.  The first run of the front-of-queue
+    # arm took four such phantom fills in 90 seconds.  A fill requires somebody
+    # to actually sell to you, at every queue position.
+    if o["sold"] <= 0 or o["sold"] < o["ahead"]:
         return
     st.rest.pop(tok, None)
     room = min(st.cfg.max_per_market - st.held(slug, side)[1],
@@ -1651,6 +1665,9 @@ if __name__ == "__main__":
     p.add_argument("--log-stale", type=int, default=0,
                    help="record stale quotes as samples instead of skipping "
                         "them.  Trading still respects --max-stale.")
+    p.add_argument("--maker-improve", type=int, default=0,
+                   help="post this many ticks above the best bid, buying queue "
+                        "priority at the cost of the spread it was earning.")
     p.add_argument("--maker-cancel", type=float, default=0.04,
                    help="cancel a resting bid once the mid has moved this far "
                         "from it.  A bid that is merely no longer best is "
