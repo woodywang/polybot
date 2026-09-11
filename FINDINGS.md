@@ -884,3 +884,56 @@ whether this entire strategy exists.
 
 Until then the honest statement is: **on quotes verified to be live, there is no
 measurable edge in any rule tested** — model, spot comparison, or favourite.
+
+---
+
+## 20. Answered without sending an order: stale books are not tradeable either way
+
+Section 19 said paper trading could not tell a real resting order from a dead
+feed. That was wrong — the CLOB REST book settles it. `stalecheck.py` watches
+the websocket, and whenever a token's book has not moved for 20 seconds it pulls
+`clob.polymarket.com/book` for the same token and compares.
+
+26 probes, 20 with quotes on both sides:
+
+| | count | |
+|---|---|---|
+| websocket matches REST | 12 | the order really is resting |
+| websocket differs | 8 | **40% — the feed had gone quiet** |
+
+And the two groups separate perfectly by whether they *look* profitable:
+
+**Feed was dead** — every case a large apparent mispricing:
+
+```
+WS 0.63/0.64   REST 0.27/0.28     36¢ apart
+WS 0.39/0.40   REST 0.70/0.71     31¢ apart
+WS 0.64/0.65   REST 0.77/0.79     13¢ apart
+```
+
+**Order really frozen** — every case carries no edge:
+
+```
+WS 0.49/0.50   REST 0.49/0.50     at the money
+WS 0.999/None  REST 0.999/None    already decided, 0.1¢ of upside
+WS None/0.001  REST None/0.001     already decided
+```
+
+So a stale book is one of two things, and **neither is tradeable**: a dead feed
+showing a mispricing that does not exist, or a genuinely frozen quote sitting
+where there is nothing to win. The bigger the apparent edge, the more certain it
+is the first.
+
+This closes the question sections 18 and 19 left open, and it did not need a
+live order — only a second, independent view of the same book. The lesson is
+narrower than "paper trading cannot answer it": **a single data source cannot
+audit itself.** Once the REST book was added as a cross-check the answer took
+twelve minutes.
+
+### Where that leaves the strategy
+
+On quotes verified live by their own movement, no rule tested — the TWAP model,
+the spot comparison, or buying the favourite — shows a significant edge
+(section 19). The apparent edge was the feed, and the feed is now guarded
+against by `--max-stale`. There is no evidence here of a tradeable strategy in
+Polymarket's 5-minute crypto markets at retail latency.
