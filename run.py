@@ -1281,6 +1281,22 @@ def report(a):
                   f"{statistics.mean(vm):>+9.4f}{tm:>+7.2f}"
                   f"{statistics.mean(hs):>+10.4f}"
                   f"{statistics.mean(vt):>+11.4f}{tt:>+7.2f}")
+        # Five buckets all leaning the same way is a 1-in-32 sign test, so the
+        # split above is not the right unit -- it is five looks at one claim.
+        # Pool to one number per window, one test: is the book's mid biased at
+        # all, and does anything survive the fee?
+        pool = {}
+        for per in fb.values():
+            for wk, x in per.items():
+                e = pool.setdefault(wk, [0, 0.0, 0.0])
+                e[0] += x[0]; e[1] += x[1]; e[2] += x[2]
+        vm = [x[1] / x[0] for x in pool.values()]
+        vt = [x[2] / x[0] for x in pool.values()]
+        for lbl, v in (("pooled vs mid", vm), ("pooled taker net", vt)):
+            sd = statistics.stdev(v) if len(v) > 1 else 0.0
+            t = statistics.mean(v) / (sd / math.sqrt(len(v))) if sd else 0.0
+            print(f"  {lbl:<20}{len(v):>5} windows"
+                  f"{statistics.mean(v):>+10.4f}   t={t:+.2f}")
 
     # Same legs, bucketed by price paid instead.  The taker fee is 7%x(1-p) of
     # stake, so it costs 3.5% at the money and 0.14% at 98c: if any edge

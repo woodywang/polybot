@@ -2374,3 +2374,53 @@ alone: a maker avoids the `7% × (1-p)` taker fee as well, about 1.7¢ at the
 money. Spread plus fee is ~2.7¢ a share against a ~55¢ contract, close to 5%
 per position. That is the number adverse selection has to eat before this is
 dead.
+
+---
+
+## 47. Two small corrections that both go the same way
+
+**The five-bucket sign pattern was not evidence.** Section 45's `vs mid` column
+is positive in all five price bands, which reads like a 1-in-32 sign test. It is
+not: the five buckets are five looks at the same 67 windows, so they cannot
+multiply. Pooled to one number per window and tested once:
+
+```
+pooled vs mid        67 windows   +0.0288   t=+1.38
+pooled taker net     67 windows   +0.0118   t=+0.57
+```
+
+The book's mid may lean about 2.9 points, and nothing survives the fee. Section
+45's conclusion is unchanged; the apparent extra confirmation was an artifact of
+counting correlated tests as independent ones — the same error as clustering
+btc/eth/sol as three markets in section 43.
+
+**Momentum decays with horizon.** The hourly markets settle on the same
+close-vs-open shape twelve times longer, so the sigma-free persistence test runs
+on them unchanged. Pooled into quarters of the window:
+
+```
+elapsed      5-minute            hourly
+             excess      t       excess      t
+0-25%       +0.0131   +3.30     +0.0083   +0.76
+25-50%      +0.0178   +4.95     -0.0055   -0.48
+50-75%      +0.0216   +6.80     +0.0106   +1.15
+75-100%     +0.0234   +9.28     +0.0144   +2.57
+```
+
+Strong and monotone at five minutes, weak and mostly absent at an hour, with
+only the final quarter reaching t = 2.57 against a four-test threshold of 2.50.
+Microstructure momentum decaying with horizon is a standard result and this is
+a clean instance of it on 715 hourly windows.
+
+The first run of this printed one row per offset — 59 rows on 715 windows — and
+two of them showed t > 2.7. Sixty tests produce that by construction. The table
+was rebuilt to pool before it could be read.
+
+### What it means for the maker case
+
+The instrument that favours making (hourly, §46) is the one with **no
+predictability left in it**. That is not a disappointment: market making does
+not need a forecast, it needs the mid to sit still while the order rests, and
+that is exactly the axis on which hourly beats 5-minute by ten to one. It does
+mean there is no directional overlay to stack on top — the spread is the whole
+thesis, and adverse selection is the only thing that can take it away.
