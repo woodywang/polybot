@@ -269,3 +269,63 @@ Everything runs in the container defined by `contrib/Dockerfile.buildenv`;
 simulated against the displayed book after a configurable latency, with the
 real taker fee applied. Live trading is one signed POST away and deliberately
 absent until a calibration report says the edge clears the fee.
+
+---
+
+## 8. Out-of-sample replication — and what it killed
+
+Features were scored by AUC on whether a leg ever found a hedge, then the same
+scoring was repeated on an independent arm running a different lock policy over
+the same feed. Only two of six survived:
+
+| feature | `paper_lock` | `paper_dir` | verdict |
+|---|---|---|---|
+| ask price | 0.803 | 0.717 | replicates |
+| best-ask depth | 0.352 | 0.370 | replicates (inverted) |
+| trend ER | 0.710 | 0.527 | collapses |
+| trade intensity | 0.350 | 0.476 | collapses |
+| time remaining | 0.569 | 0.505 | collapses |
+| moneyness | 0.460 | 0.487 | null in both |
+
+**Why the survivors survived: they are leg-level, the casualties are
+market-level.** Trend ER and trade intensity are measured once per window and
+shared by every leg in it, so 864 legs carry the information of 81 markets —
+an order of magnitude less than the leg count suggests. Confidence in any
+market-level feature has to be discounted to the market count. This is the
+single most useful methodological lesson so far, and it retired a filter that
+had already been deployed.
+
+### The ask filter raises the hedge rate but is not alpha
+
+Comparing each price bucket's realised win rate against the probability its own
+price implies:
+
+| ask bucket | `paper_lock` excess | `paper_dir` excess |
+|---|---|---|
+| 0.40–0.50 | **+23.1 pt** | **−24.1 pt** |
+| 0.50–0.60 | +11.7 pt | +3.1 pt |
+| all legs | +3.4 pt | −7.0 pt |
+
+The mid-book buckets flip sign between arms. Buying the favoured side makes a
+hedge more likely to appear; it does not make the trade mispriced.
+
+### Longshots are a replicated, mechanical loser
+
+| ask bucket | win rate | implied | legs |
+|---|---|---|---|
+| 0.00–0.10 | **0.0%** | 4.5–4.9% | 117 |
+| 0.10–0.20 | **0.0%** | 14.6–14.7% | 84 |
+
+201 legs across both arms, every one worthless at settlement. Two forces point
+the same way: the fee is `7% × (1-p)` of stake, so 6.3% at a dime, and a sigma
+estimated even slightly high pushes probability into exactly the tail being
+bought. Cheap contracts buy the model's least reliable estimate at its most
+expensive fee.
+
+### Corrections to earlier sections
+
+- "Naked residue loses mechanically" was a small-sample artifact. At 81 markets
+  naked legs win 26–39% and recover ~64% of their cost, so the breakeven rule in
+  section 5 is conservative rather than exact.
+- At 81 markets `paper_lock` is **+1.82%** and hedging helped both arms
+  (+$50.62 and +$241.55). The directional hit rate is still 43–51%.
