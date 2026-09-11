@@ -1742,3 +1742,66 @@ thirty, but *model versus book* has only been tested on Sep 5–11. A 22-day
 extension is running. Until it returns, this is a strong result on a short
 window, which is precisely the shape of several findings retracted earlier in
 this file.
+
+---
+
+## 37. Controls: one failed because its data is bad, one passed and found a bias
+
+### The 5-minute negative control is not usable
+
+Running the identical pipeline on 5-minute markets produced a *larger* edge than
+the hourly one — +15.60¢ at t = 16.76 — while the model's log-loss there was
+**worse** than the book's (0.4588 against 0.4540). Those two cannot both be
+true, so something was wrong.
+
+Auditing `prices-history` against the recorded book, the same two-source method
+as before:
+
+| market | median p − mid | **mean \|p − mid\|** |
+|---|---|---|
+| hourly | +0.00¢ | **1.15¢** |
+| 5-minute | +0.00¢ | **8.70¢** |
+
+Centred in both, but the two independent sources disagree by nearly **nine
+cents** on 5-minute markets against one on hourly — which is exactly the
+magnitude needed to manufacture the edge that appeared. The control is
+inconclusive: **its inputs are unreliable**, so it neither confirms nor refutes
+the hourly result. The hourly measurement, where the sources agree to 1.15¢,
+stands.
+
+### The placebo test passed, and quantified a bias worth subtracting
+
+Shuffling market-level outcomes and re-running everything, twenty times:
+
+| | net/share | t |
+|---|---|---|
+| real | **+11.36¢** | **+18.54** |
+| placebo, 20 runs | +2.91¢ mean, [+1.21, +4.36] | +3.16 mean, [+1.30, **+4.81**] |
+
+The real statistic exceeds every placebo by a factor of four, so the pipeline is
+not generating the result from nothing.
+
+But **the placebo is +2.91¢, not zero**, and that has to be explained rather
+than ignored. The selection `|model − mkt| ≥ 0.10` preferentially picks the
+*cheaper* side — mean ask 0.440. With outcomes shuffled the win rate returns to
+roughly 50%, so `0.50 − 0.44 − fee ≈ +4¢` falls out of the selection alone. It
+is a selection bias, not alpha.
+
+**Edge above the placebo baseline: 11.36 − 2.91 = +8.45¢ a share.**
+
+### Where the hourly claim now stands
+
+| check | result |
+|---|---|
+| markets | 1,581 (22 days) |
+| per-market aggregation | t = 18.54 |
+| paying the ask, not the mid | survives (+8.44¢ on the 6-day cut) |
+| three times the measured spread | survives (+6.45¢, t = 5.80) |
+| staleness | survives; disagreement *falls* with staleness |
+| source agreement | 1.15¢ between two independent feeds |
+| null strategies (random, always-Up, always-cheap, always-dear) | all correctly negative |
+| placebo (shuffled outcomes) | t 18.54 against a placebo max of 4.81 |
+| **net of the placebo bias** | **+8.45¢/share** |
+
+What has *not* been tested is a fill: every number here assumes the quoted price
+is transactable for the size traded, and no order has ever been sent.
