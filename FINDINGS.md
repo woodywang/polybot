@@ -2438,6 +2438,9 @@ thesis, and adverse selection is the only thing that can take it away.
 
 ## 48. The hourly book's mid is biased, the fee eats it, and a maker would keep it
 
+> **RETRACTED — see section 51.** The bias is an equal-weighting artifact.
+> Weighted the way a trader is actually exposed, it is +0.39pp, not +4.30pp.
+
 > **Numbers superseded by section 49** — same labelling bug, and the
 > "pre-specified 0.55-0.65 band" actually pooled 0.60-0.80. Corrected, every
 > figure in this section gets *stronger*, not weaker.
@@ -2506,6 +2509,9 @@ the last hour rather than arguing about it.
 ---
 
 ## 49. A bucket-width bug, and the corrected result is stronger
+
+> **Maker column retracted — see section 51.** The bucket fix was correct
+> and the klines figures stand. The hourly *book* bias does not.
 
 `int((p - 0.5) * 10)` makes buckets **10¢ wide**. I labelled them 5¢ wide, in
 three files, so every band in sections 44, 45 and 48 named the wrong prices: the
@@ -2584,6 +2590,9 @@ t-statistic.
 
 ## 50. A maker arm, and the instrument checks it rests on
 
+> **Premise retracted — see section 51.** The arms and the instrument
+> checks stand; the +5.3¢ they were built to test does not.
+
 Section 49's number — a maker keeping +5.3¢ a share at t = 4.79 over 517 hours —
 assumes fills arrive independently of what happens next. No historical file can
 test that, so `run.py` gains `--maker`: it posts at the touch instead of taking,
@@ -2640,3 +2649,90 @@ Of the maker's +5.3¢, only **1.0¢ is spread capture**; +4.3¢ is the book's ow
 bias. So a maker who has to improve the bid to get queue priority — giving up
 the entire spread and buying at the mid — still holds +4.3¢ and pays no fee.
 **Queue competition cannot take this edge away; only adverse selection can.**
+
+---
+
+## 51. The book bias was dwell-time selection, and section 45 was right all along
+
+Backtesting the maker rule as an account rather than a t-statistic contradicted
+it outright: **t = +0.65**, against +4.79 from the same data and the same band.
+A statistic and a backtest disagreeing by that much means one of them is not
+measuring what I think.
+
+The backtest was right. Splitting in-band observations by how long the market
+stayed in the band:
+
+```
+minutes in band   markets      obs   mean excess
+1-5                   268      847     +0.2264
+6-15                  647    6,798     +0.0522
+16-30                 588   12,363     -0.0327
+31+                    32    1,128     -0.0530
+```
+
+**Dwell time is determined by the outcome.** A market leaves the 0.55-0.65 band
+because it resolved — and the ones that left fastest resolved hardest in the
+favourite's direction. A market that sits at 0.60 for half an hour is a coin
+flip wearing a 0.60 price tag, and its excess is *negative*.
+
+Clustering by hour gives each market one vote regardless of how long it was
+tradable. That over-weights the 268 fast-exiting markets — 847 observations —
+against the 588 lingering ones carrying 12,363. **A trader cannot weight markets
+equally.** A resting order is exposed in proportion to time, so the tradable
+estimand is observation-weighted:
+
+```
+hour-clustered (each market one vote)   +0.0448   t=+4.03
+observation-weighted (exposure)         +0.0039
+first in-band quote per market          -0.0019
+one random in-band quote per market     +0.0536
+```
+
+The number a maker can actually earn is **+0.39 points, which is zero.** The
++4.48 was never available.
+
+### Backtested as an account
+
+```
+band 0.55-0.65, $3 flat, 22 days
+  1,535 trades over 516 hours (70/day)   win rate 57.8%
+  mean $+0.0430/trade   sd $2.608   t=+0.65
+  $100 -> $165.99   max drawdown 82.1%
+```
+
++66% in 22 days, and t = 0.65 — the gain is one standard deviation of a random
+walk with 1,535 steps. The 82% drawdown on a $100 account settles the practical
+question independently of the statistical one.
+
+### What survives, and what this restores
+
+The **price-path momentum stands**: the sigma-free test takes every window at
+four fixed offsets with no band conditioning, so dwell-time selection cannot
+reach it. And the klines result survives reweighting — observation-weighted it
+is still +3.59 points, because the *random walk* genuinely under-prices the
+favourite, which the sigma sweep in section 44 already showed is partly the
+estimator.
+
+The **book** does not. Observation-weighted, the hourly book's bias is +0.39
+points. Section 45 concluded "the book prices the momentum, there is no taker
+edge", and section 49 partly retracted that as "too strong". Section 49 was
+wrong to. Section 45 was right, and it is now right on 527 hours instead of 67
+windows.
+
+### The lesson, which is general
+
+**Any statistic conditioned on a price band inherits selection from how long the
+market stayed in that band — and dwell time is a function of the outcome.**
+Equal-weighting markets is where it enters. This is the same error as section
+40's cheap pairs (conditioning on having been right) and section 43's
+"ask > 0.5" (conditioning on an undefined object), in its third costume. Three
+times now the trap has been: a quantity that looks like a price is actually a
+summary of the path that produced it.
+
+### The maker arms stay up
+
+They are now testing a thesis I expect to fail, which is the more useful
+experiment. What is left of the maker case is the half-spread alone — about 1¢
+a share, exactly what section 46 said before the book-bias detour — against a
+mid that moves 0.5¢ in ten seconds. `makercheck.py` still decides that, and the
+fill assumption remains the one thing no file here has ever tested.

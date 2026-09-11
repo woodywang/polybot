@@ -154,3 +154,66 @@ def analyse(path="histtest22.json"):
         print(f"\n  0.55-0.65 pooled (predicted band), {len(pool)} hours:")
         for nm, c in zip(("vs mid", "taker", "maker"), cols):
             print(f"    {nm:<8}{st.mean(c):>+9.4f}   t={tstat(c):+.2f}")
+
+
+def equity(path="histtest22.json", band=(0.55, 0.65), stake=3.0, half=0.010):
+    """Backtest the maker rule as an account, not as a t-statistic.
+
+    A mean edge says nothing about whether $100 survives the path to it. One
+    fill per (hour, asset) at the first in-band quote, bought at mid - half
+    (a maker is handed the half-spread) with no fee, held to settlement.
+
+    This is a BACKTEST on historical quotes, not a live ledger -- live P&L comes
+    only from `run.py --report`. It assumes every posted order fills, which is
+    exactly the assumption `makercheck.py` exists to break.
+    """
+    rows = sorted(json.load(open(path)), key=lambda r: (r["hour"], r["asset"], -r["tau"]))
+    seen, trades = set(), []
+    for r in rows:
+        k = (r["hour"], r["asset"])
+        m = r["mkt"]
+        if k in seen or m is None or not 0.0 < m < 1.0:
+            continue
+        p = m if m >= 0.5 else 1.0 - m
+        if not band[0] <= p <= band[1]:
+            continue
+        seen.add(k)
+        w = r["y"] if m >= 0.5 else 1.0 - r["y"]
+        px = p - half
+        trades.append((r["hour"], stake / px * (w - px)))
+
+    if not trades:
+        return print("no trades")
+    eq, peak, dd, cur, ruin = 100.0, 100.0, 0.0, {}, None
+    for h, pnl in trades:
+        cur[h] = cur.get(h, 0.0) + pnl
+    path_ = []
+    for h in sorted(cur):
+        eq += cur[h]
+        if ruin is None and eq <= 0:
+            ruin = len(path_)          # the account is gone; the rest is fiction
+        peak = max(peak, eq)
+        dd = max(dd, (peak - eq) / peak)
+        path_.append(eq)
+    wins = sum(1 for _, p in trades if p > 0)
+    per = [p for _, p in trades]
+    sd = st.stdev(per)
+    print(f"\n=== maker backtest, band {band[0]:.2f}-{band[1]:.2f}, "
+          f"${stake:.0f} flat, 22 days ===")
+    print(f"  trades {len(trades):,} over {len(cur):,} hours"
+          f"   ({len(trades)/max(len(cur),1):.2f} per hour, "
+          f"{len(trades)/22:.1f} per day)")
+    print(f"  win rate {wins/len(trades)*100:.1f}%"
+          f"   mean ${st.mean(per):+.4f}/trade   sd ${sd:.3f}"
+          f"   t={st.mean(per)/(sd/math.sqrt(len(per))):+.2f}")
+    print(f"  equity $100.00 -> ${path_[-1]:.2f}"
+          f"   ({(path_[-1]-100)/100*100:+.1f}% in 22 days)")
+    if ruin is not None:
+        print(f"  *** RUINED at hour {ruin} of {len(path_)}"
+              f" -- min equity ${min(path_):.2f}."
+              f"  Everything after that point is fiction. ***")
+    print(f"  max drawdown {dd*100:.1f}%"
+          f"   worst hour ${min(cur.values()):+.2f}"
+          f"   best hour ${max(cur.values()):+.2f}")
+    print(f"  peak capital committed ${stake*3:.0f} of $100"
+          f"   (3 assets, one position each)")
