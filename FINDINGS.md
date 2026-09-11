@@ -3528,3 +3528,78 @@ and one that already costs half a cent more than the edge is worth.
 **Every route through this instrument is now measured and every one is
 negative.** Not "unproven" — measured, on the largest and cleanest sample the
 project has, with the weighting a trader actually experiences.
+
+---
+
+## 66. Review: three conclusions overturned, none of them about the market
+
+### (1) Health
+
+Eight arms, no crashes, no exceptions. Ledger identity `$0.0000` on every arm
+with settlements. Slow-consumer drops since the `max_queue` fix: **1 across all
+arms in 16 minutes**, against a prior 0.25/min per arm.
+
+### (2) Every arm, from `--report`
+
+```
+arm                mkts    stake      NET      pct    maxDD    final
+paper_hour            6   199.50   -17.71   -8.87%   38.7%    82.29
+paper_fav5            4    50.12   -32.29  -64.44%   32.3%    67.71
+paper_dog5            5    50.08   +45.50  +90.85%    0.0%   145.50
+stale5                3    25.12   -13.61  -54.17%   13.6%    86.39
+paper_fav5_nocap     39   627.72   -25.53   -4.07%   29.4%    74.47
+paper_dog5_nocap     21   304.97   -43.84  -14.37%   59.4%    56.16
+```
+
+`paper_fav5` at -64% and `paper_dog5` at +91% are complements of each other on
+**four and five markets**. That is $3 flat stakes on a $100 account over a
+handful of coin flips, and it is worth writing down only as a reminder of what
+this sample size produces: two numbers that look like enormous results and mean
+nothing. **No conclusions from any capped arm.**
+
+### (3) What was overturned — all three were faults in the instrument
+
+**Section 49's taker column changed sign.** +1.81c a share hour-clustered,
+**-2.27c** weighted by actual exposure. Section 51 had already established that
+equal-weighting markets is the wrong estimand; I applied the correction to one
+column of that table and left the other two. Same data, same band, opposite
+conclusion.
+
+**Section 56's diagnosis was wrong.** It blamed 309 disconnects on thirteen
+collectors contending. After cleaning to two arms they dropped *more often* —
+the variable was per-process capacity, and the 5-minute books push 19x the
+frames of the hourly ones.
+
+**Section 54's "stale quotes cannot be tested here" is no longer true.** It was
+true when written: the websocket disagreed with the REST book 27% of the time.
+One keyword argument later it disagrees 0 times in 16 observations.
+
+None of these were discoveries about Polymarket. All three were the harness
+being wrong in a way that looked like a market fact.
+
+### (4) Adjustments
+
+**Retired `paper_hour`** — it ran with no `--max-committed` and was carrying
+$83.98 of open exposure against $114.34 of equity, a configuration sections 59
+and 64 now establish as unsafe, to test hourly taking, which section 65 measures
+at -2.27c a share on 527 hours. Closed thesis at 73% exposure.
+
+**Retired `maker_fav`** — 0 fills in 53 minutes. It tests the at-the-touch horn
+of section 57, which `makercheck.py` has already measured directly (7.7% fill
+rate, -15c markout). An arm producing no observations per hour is not a slow
+experiment, it is not an experiment.
+
+**Kept**: `maker_front` (the horn *not* yet measured, 5 fills and settlements
+imminent), the capped complementary pair, and `stale5` — the live test of the
+last surviving hypothesis, now that the feed can be trusted.
+
+**`pickoff` finished with zero candidates** across its full run: no hourly quote
+was ever both untouched for 5+ seconds and more than 3c from model fair. On the
+hourly instrument, the pick-off opportunity does not exist.
+
+### Sample sizes, stated plainly
+
+`paper_fav5` 4 markets, `paper_dog5` 5, `stale5` 3, the maker arms 0
+settlements. **Nothing in this round's P&L table supports a conclusion.** What
+the round produced is three corrections and one closed avenue, and those came
+from diagnostics, not from the ledger.
