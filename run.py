@@ -533,10 +533,24 @@ async def resolve(st):
         # settled yet" forever.  Polymarket also flips `closed` about 4-6
         # minutes after the window ends, so passes before that find nothing.
         for slug in due:
-            for m in await asyncio.to_thread(gamma, [slug], True):
-                pr = json.loads(m.get("outcomePrices") or "[]")
-                if len(pr) == 2 and {pr[0], pr[1]} == {"1", "0"}:
-                    won = "Up" if pr[0] == "1" else "Down"
+            # Two settlement clocks.  The 5-minute markets flip `closed` within
+            # minutes of expiry and print a clean {"1","0"}.  The hourly ones go
+            # through UMA: the proposal lands right after expiry with
+            # outcomePrices already at 0.9995/0.0005, but `closed` stays false
+            # for the two-hour dispute window -- so waiting on `closed` never
+            # settles an hourly market at all.  Reading the price instead is
+            # safe here only because `due` has already established the window
+            # ended over two minutes ago; before expiry an extreme quote is a
+            # live price, after it, it is the resolution.
+            ms = (await asyncio.to_thread(gamma, [slug], True)
+                  or await asyncio.to_thread(gamma, [slug], False))
+            for m in ms:
+                try:
+                    pr = [float(x) for x in json.loads(m.get("outcomePrices") or "[]")]
+                except (TypeError, ValueError):
+                    continue
+                if len(pr) == 2 and max(pr) >= 0.99:
+                    won = "Up" if pr[0] > pr[1] else "Down"
                     st.db.execute("UPDATE markets SET outcome=? WHERE slug=?",
                                   (won, m["slug"]))
                     got += 1
@@ -1096,6 +1110,65 @@ def report(a):
         e[2] += ed * sz
         e[3] += real
         e[4][slug] = e[4].get(slug, 0.0) + real
+    # --- is the BOOK calibrated?  This is the question underneath all of it.
+    # Traded legs are selected on the model's opinion, so a gradient across them
+    # confounds the book with the filter that picked them.  Sample rows are the
+    # book quoted on a fixed schedule regardless of what the model thought, so
+    # they measure the market itself.  Prediction markets classically overprice
+    # longshots; if that holds here it is an edge that owes nothing to the model
+    # -- and the taker fee of 7%x(1-p) of stake is what it has to clear.
+    bb = {}
+    for slug, side, ask in db.execute(
+            "SELECT slug,side,ask FROM obs WHERE kind='sample' AND ask IS NOT NULL"):
+        if slug not in res:
+            continue
+        b = min(int(ask * 10), 9)
+        e = bb.setdefault(b, [0, 0.0, 0.0, {}])
+        w = 1.0 if res[slug] == side else 0.0
+        e[0] += 1; e[1] += ask; e[2] += w
+        m = e[3].setdefault(slug, [0, 0.0])
+        m[0] += 1; m[1] += w - ask - fair.taker_fee(ask)
+    if bb:
+        print("\nbook calibration on sample quotes (all, not just traded)")
+        print(f"  {'ask':<10}{'n':>7}{'mkts':>6}{'mean ask':>10}"
+              f"{'won':>8}{'net/sh':>9}{'t':>8}")
+        for b in sorted(bb):
+            n, sa, sw, per = bb[b]
+            v = [x[1] / x[0] for x in per.values()]
+            sd = statistics.stdev(v) if len(v) > 1 else 0.0
+            tt = statistics.mean(v) / (sd / math.sqrt(len(v))) if sd else 0.0
+            net = sw / n - sa / n - fair.taker_fee(sa / n)
+            print(f"  {f'{b/10:.1f}-{b/10+0.1:.1f}':<10}{n:>7,}{len(per):>6}"
+                  f"{sa/n:>10.3f}{sw/n:>8.3f}{net:>+9.4f}{tt:>+8.2f}")
+
+    # Same legs, bucketed by price paid instead.  The taker fee is 7%x(1-p) of
+    # stake, so it costs 3.5% at the money and 0.14% at 98c: if any edge
+    # survives the fee anywhere it is at the extremes, and that is a different
+    # question from whether the model ranks edges correctly.
+    pb = {}
+    for slug, side, px, sz, fee in db.execute(
+            "SELECT slug,side,fill_px,fill_sz,fee FROM obs"
+            " WHERE fill_sz IS NOT NULL"):
+        if slug not in res or not sz:
+            continue
+        b = min(int(px * 5), 4)                    # 20c bands
+        real = ((1.0 if res[slug] == side else 0.0) - px) * sz - fee
+        e = pb.setdefault(b, [0, 0.0, 0.0, 0.0, {}])
+        e[0] += 1; e[1] += sz; e[2] += fee; e[3] += real
+        e[4][slug] = e[4].get(slug, 0.0) + real
+    if pb:
+        print("\nrealised by price paid (fee as % of stake = 7% x (1-p))")
+        print(f"  {'ask':<12}{'legs':>6}{'mkts':>6}{'fee %stk':>10}"
+              f"{'real $/sh':>11}{'t':>8}")
+        for b in sorted(pb):
+            n, sh, fe, rl, per = pb[b]
+            v = list(per.values())
+            sd = statistics.stdev(v) if len(v) > 1 else 0.0
+            tt = statistics.mean(v) / (sd / math.sqrt(len(v))) if sd else 0.0
+            print(f"  {f'{b*20}-{b*20+20}c':<12}{n:>6}{len(per):>6}"
+                  f"{fe/max(sh,1e-9)*100/max((b*20+10)/100,1e-9):>9.2f}%"
+                  f"{rl/max(sh,1e-9):>11.4f}{tt:>+8.2f}")
+
     if eb:
         print("\npredicted edge vs realised, per traded leg (open + lock)")
         print(f"  {'pred edge':<12}{'legs':>6}{'mkts':>6}"

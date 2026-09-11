@@ -2037,3 +2037,64 @@ takes 6.6 minutes to clear in a 5-minute market — but that argument does not
 carry to the hourly markets, where the same queue sits inside a 60-minute window
 against 10× the liquidity. That is the next thing to measure, and it is the last
 structurally different idea this project has left.
+
+---
+
+## 42. The book is calibrated, so taking loses at every price
+
+Section 41 showed the model's edge over the book is nil. That invites the
+obvious follow-up: is the *book* beatable by anyone taking, model or not? The
+traded legs cannot answer it — they were selected on the model's opinion, so a
+gradient across them confounds the market with the filter that picked them. The
+`sample` rows can: they are the book quoted on a fixed schedule regardless of
+what the model thought.
+
+5,373 quotes across 168 settled markets, bucketed by the ask, against what
+actually happened:
+
+```
+ask          n    mkts  mean ask   won   net/sh after fee    t
+0.0-0.1     768   168     0.028   0.017     -0.0129       -0.96
+0.1-0.2     321   134     0.145   0.069     -0.0847       -3.31
+0.2-0.3     398   153     0.245   0.246     -0.0113       -1.53
+0.3-0.4     465   147     0.347   0.340     -0.0235       -1.43
+0.4-0.5     589   161     0.450   0.382     -0.0851       -4.29
+0.5-0.6     968   166     0.529   0.551     +0.0043       +1.19
+0.6-0.7     504   154     0.644   0.633     -0.0268       +0.43
+0.7-0.8     424   157     0.747   0.743     -0.0170       +0.93
+0.8-0.9     377   148     0.839   0.836     -0.0124       -2.12
+0.9-1.0     462   157     0.955   0.961     +0.0034       +0.26
+```
+
+Read the `mean ask` and `won` columns side by side: 0.245 → 0.246, 0.347 →
+0.340, 0.644 → 0.633, 0.747 → 0.743, 0.839 → 0.836, 0.955 → 0.961. **The book
+is calibrated.** It is pricing these contracts correctly.
+
+After the `7% × (1-p)` taker fee, net per share is negative in eight of ten
+buckets and positive in none at any meaningful t. The best cell in the table is
++0.43¢ at t = 1.19.
+
+**This closes the taking case for any taker, not just for this model.** No
+filter, no regime gate, no sizing rule and no options analogy changes it,
+because none of them change the two facts it rests on: the book is right, and
+the fee is positive.
+
+### One genuine anomaly, and why it is not tradable as measured
+
+The 0.1-0.2 bucket asks 14.5¢ for something that happens 6.9% of the time,
+t = -3.31 — textbook favourite-longshot bias. That is a **short**, and this
+harness only ever buys. Buying the complement is the natural expression, but
+the 0.8-0.9 bucket prices its side correctly (0.839 vs 0.836), so the two do
+not line up into a trade. They are also not paired observations: a sample row
+is written per (market, side) when the strategy evaluates it, and the two sides
+are not logged at the same instants, so the bucket pair cannot be read as one
+market's two legs. Treat it as unexplained, not as an edge.
+
+### What is left
+
+Taking is dead on arithmetic. The fee is `7% × (1-p)` of stake — 3.5% at the
+money — against a book that prices correctly, so the only remaining structure
+is to collect that fee rather than pay it. `makercheck.py` is measuring the
+markout on resting bids in the hourly markets now. If posted orders are
+adversely selected by more than the rebate is worth, this instrument has
+nothing in it and that is the finding.
