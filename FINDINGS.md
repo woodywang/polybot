@@ -2424,3 +2424,68 @@ not need a forecast, it needs the mid to sit still while the order rests, and
 that is exactly the axis on which hourly beats 5-minute by ten to one. It does
 mean there is no directional overlay to stack on top — the spread is the whole
 thesis, and adverse selection is the only thing that can take it away.
+
+---
+
+## 48. The hourly book's mid is biased, the fee eats it, and a maker would keep it
+
+`histtest22.json` holds 93,016 quotes across 1,581 hourly markets over 22 days —
+**527 independent hours**, against the 67 windows every live conclusion so far
+has rested on. Section 44 predicted, from 30 days of klines and before this file
+was scored, that persistence produces a hump over 0.55-0.65 that turns negative
+above 0.70. That band is therefore pre-specified, not chosen after the fact.
+
+First, what the price series actually is. `prices-history` returns a **mid**,
+not an ask — verified by pulling both tokens of one market and summing them at
+paired timestamps: median exactly 1.0000, where two asks would sum to about
+1.02. A taker does not get this price. They cross the half-spread (1.0¢ on
+hourly, §46) *and* pay the fee. A maker is handed the half-spread and pays no
+fee. Costing it correctly is the difference between a result and a mistake:
+
+```
+price             obs  hours   vs mid      t    taker      t    maker      t
+0.50-0.55      26,263    526  +0.0317  +3.67  +0.0045  +0.52  +0.0417  +4.83
+0.55-0.60      17,452    515  +0.0454  +3.70  +0.0197  +1.61  +0.0554  +4.52
+0.60-0.65      12,884    514  +0.0263  +2.17  +0.0036  +0.29  +0.0363  +2.99
+0.65-0.70      12,425    513  +0.0125  +1.16  -0.0060  -0.56  +0.0225  +2.09
+0.70+          23,992    512  -0.0042  -0.68  -0.0162  -2.61  +0.0058  +0.93
+```
+
+One pre-specified test on the predicted band, 517 hours:
+
+```
+0.55-0.65 pooled
+  vs mid   +0.0339   t = +2.93     the book's mid IS biased
+  taker    +0.0095   t = +0.82     the fee and spread eat all of it
+  maker    +0.0439   t = +3.79     a maker keeps 4.4c a share
+```
+
+Three things at once, and they are consistent with everything before them:
+
+1. **The hourly book under-prices the favourite by 3.4 points** at 0.55-0.65 —
+   the persistence section 44 found in the price path, which the book does not
+   fully carry. Predicted band, independent data, t = 2.93 on 527 hours.
+2. **A taker gets nothing**, t = 0.82. Sections 41, 42 and 45 said taking is
+   dead and this says it again on 8× the sample: the edge exists and the
+   `7% × (1-p)` fee plus the spread is larger than it.
+3. **A maker would keep +4.4¢ a share**, about 7.7% of a 57¢ position, t = 3.79.
+
+The 0.70+ row is the other half of the same story: as a taker it is
+*significantly negative*, t = −2.61, exactly where section 44 said persistence
+reverses. A mechanism that predicts its own failure region is a better sign than
+one that only predicts wins.
+
+### The assumption this entirely rests on
+
+The maker column assumes fills arrive independent of what happens next. That is
+the one thing it cannot assume: a resting bid on the favourite is hit precisely
+by someone selling it, and on a BTC market anybody with a Binance feed knows
+which way it just moved. **The maker number is an upper bound**, and adverse
+selection can only take it down.
+
+The size of the question: 4.4¢ would have to be erased by post-fill drift, and
+the hourly mid's median travel is 0.5¢ in ten seconds and 2.0¢ in sixty (§46).
+Erasing 4.4¢ needs fills concentrated near the p90 of a full minute's movement.
+Not impossible — that is what informed flow does — but it is a large ask, and
+`makercheck.py` has been measuring the actual markout on live hourly books for
+the last hour rather than arguing about it.
