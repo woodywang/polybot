@@ -4379,3 +4379,55 @@ calibrated by accident — it is calibrated conditionally, on exactly the featur
 that are easy to find.** That is a much stronger statement than "the book is
 right on average", and it is the reason this project has not found a taker edge
 in seventy-nine sections.
+
+---
+
+## 80. The book prices the hard feature too
+
+Section 79 ended on a pattern: every statistical property found in the price
+series turned out to already be in the quote. The obvious objection is that I had
+only tested **easy** features — within-asset momentum, the favourite near the
+money, hour-to-hour reversal. All three are visible to anyone looking at one
+asset's own history.
+
+So here is a harder one. BTC leads alts across crypto markets generally. If
+Polymarket's ETH book only watches ETH, then a BTC move is information it has
+not applied, and ETH should settle away from its own quote in BTC's direction.
+
+Aligning all three books at the same `(hour, minute-to-expiry)` and regressing
+the target's settlement error on BTC's simultaneous lean:
+
+```
+target      obs   hours    slope       t
+eth      30,990     522   0.0786   +0.26
+sol      30,992     522   0.0629   +0.20
+```
+
+A positive slope would mean BTC's quote predicts where ETH settles relative to
+ETH's own quote. It is zero. **The ETH and SOL books already carry BTC's
+information.**
+
+### What the pattern now covers
+
+```
+feature                        real?   book prices it?
+momentum within a window       yes     yes  (§44, §45)
+the favourite near the money   yes     yes  (§43, §65)
+reversal between hours         yes     yes  (§79)
+cross-asset lead-lag           --      yes  (this section)
+```
+
+Four features, three of them genuine properties of the price series with
+t-statistics between 2.4 and 9.3, and the quote contains all four. **This is not
+a book that happens to be right; it is a book with participants who have already
+done this work.**
+
+That reframes the whole project's result. Seventy-nine sections of not finding a
+taker edge is not evidence that I looked in the wrong places — the last four
+sections looked in progressively less obvious places and found the book waiting
+in each one. The honest conclusion is that **the information a public price
+series contains is already in the price**, and what is left for an outsider is
+the `7% x (1-p)` fee.
+
+Which leaves exactly one thing that is *not* in a public price series: how fast
+the book applies what it knows. `latency.py` is measuring that now.
