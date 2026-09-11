@@ -1169,6 +1169,16 @@ def report(a):
         print(f"  -> hedging changed the result by "
               f"${(pp+np_)-(c_pay-c_cost):+,.2f}")
 
+    # Every share settles at exactly 0 or 1, so regrouping the same legs into
+    # pairs + residue MUST reproduce open legs + hedge legs.  This ran nested
+    # inside another block for a while and silently stopped checking anything
+    # on arms that never hedge -- which are exactly the arms it matters for.
+    # It stays at top level and unconditional.
+    def _identity():
+        gap = (pp + np_) - ((c_pay - c_cost) + (l_pay - l_cost))
+        print(f"\nidentity check: pairs+residue - (opens+hedges) = ${gap:+.4f}"
+              f"   {'OK' if abs(gap) < 0.01 else '<<< BROKEN'}")
+
     # --- is the hedge leg itself a good purchase?
     # Section 5 established the sequential lock is not arbitrage: it is the
     # winning branch of a directional bet.  It can still ADD value, but only if
@@ -1185,6 +1195,7 @@ def report(a):
         if res[slug] == side:
             e[1] += sz
             e[2] += 1
+    l_cost = l_pay = 0.0
     if lk:
         l_cost = sum(v[0] for v in lk.values())
         l_pay = sum(v[1] for v in lk.values())
@@ -1317,9 +1328,14 @@ def report(a):
     # which no calibrated quote offers.  Stale quotes are the only candidate
     # left.  Needs `--log-stale 1`; older databases have no rows here.
     sq = {}
-    for slug, side, ask, age in db.execute(
+    # `report()` opens the file directly and never builds a State, so it does
+    # not get State's ALTER TABLE.  Databases written before --log-stale have no
+    # such column, and asking for it took the whole report down -- which is the
+    # one path every P&L conclusion here is allowed to come from.
+    have_stale = "stale" in {r[1] for r in db.execute("PRAGMA table_info(obs)")}
+    for slug, side, ask, age in (db.execute(
             "SELECT slug,side,ask,stale FROM obs WHERE kind='sample'"
-            " AND ask IS NOT NULL AND stale IS NOT NULL"):
+            " AND ask IS NOT NULL AND stale IS NOT NULL") if have_stale else []):
         if slug not in res:
             continue
         b = 0 if age < 5 else (1 if age < 20 else (2 if age < 60 else 3))
@@ -1471,9 +1487,7 @@ def report(a):
             print(f"  {lbl:<12}{n:>6}{len(per):>6}"
                   f"{pr/max(sh,1e-9):>11.4f}{rl/max(sh,1e-9):>11.4f}{tt:>+8.2f}")
 
-        gap = (pp + np_) - ((c_pay - c_cost) + (l_pay - l_cost))
-        print(f"  identity check: pairs+residue - (opens+hedges) = ${gap:+.4f}"
-              f"   {'OK' if abs(gap) < 0.01 else '<<< BROKEN'}")
+    _identity()
 
     # --- was simultaneous arbitrage ever available?
     r = db.execute("SELECT COUNT(*), MIN(cost), AVG(cost),"

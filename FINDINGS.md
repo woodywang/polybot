@@ -2941,3 +2941,95 @@ minutes, against resting size that a $3 order sits behind. A strategy whose edge
 is 1¢ a share needs volume to matter, and this instrument may simply not have
 it. `makercheck.py` reports both numbers — fill rate and markout — and it is the
 fill rate that decides whether the markout is even worth reading.
+
+---
+
+## 56. Review: the harness was corrupting its own data, and `--report` was broken
+
+Routine review, and two of the three things it found were faults in the
+instrument rather than results from it.
+
+### `--report` crashed on every pre-existing database
+
+`--log-stale` added an `obs.stale` column with an `ALTER TABLE` migration in
+`State.__init__`. `report()` opens the file directly and never builds a State,
+so every database written before that column took the whole report down with
+`no such column: stale`. **The one path every P&L conclusion in this project is
+allowed to come from was dead for four arms and I did not notice until the
+review asked for it.** Fixed by checking `PRAGMA table_info` first.
+
+Worse, the identity check — the line that verifies pairs + residue reproduces
+opens + hedges — had drifted *inside* the predicted-edge block during an earlier
+edit, and referenced the hedge-leg totals. So on any arm that never hedges it
+either crashed or silently never ran, **which is exactly the class of arm it
+matters for**. It is now a top-level call with the hedge totals defaulted to
+zero. All nine arms reconcile to $0.0000.
+
+### The feed drops are self-inflicted, and they are the dead-feed artifact
+
+Every one of the 309 logged errors across the fleet is the same:
+
+```
+[poly] ConnectionClosedError: received 1013 (try again later)
+       slow consumer: send buffer full; retry
+```
+
+Polymarket is dropping the socket because the process is not draining it fast
+enough. Counted per arm:
+
+```
+paper_dir 74   paper_lock 75   paper100_spot 58   paper100_fav 45
+paper100_filt 37   paper_fav5 11   paper_dog5 9   paper_hour 0
+```
+
+This is almost certainly **section 54's dead feed**: `stalecheck.py` found the
+websocket book disagreeing with the CLOB REST book 27% of the time, by up to 14
+cents, and a dropped-and-resubscribed socket is precisely how a token's book
+freezes in one view while the market moves on in the other.
+
+It is self-inflicted. Thirteen collectors, each holding its own subscription to
+overlapping token sets, on one machine. **The arms were degrading each other's
+data quality**, which means every staleness measurement taken today is partly a
+measurement of my own slowness.
+
+### Cleanup, with a reason rather than tidiness
+
+Retired four arms — `paper100_spot`, `paper100_fav`, `paper100_filt` and
+`paper_lock`. The three `paper100_*` are filter variants of a strategy class
+closed by sections 41, 42, 45 and 51, trading the same markets as `paper_dir`.
+`paper_lock` differs from `paper_dir` only in lock mode, and section 40 proved
+that pairing is pure regrouping — `NET = opens + hedges` identically — so the
+pair carries nothing the single arm does not. Fleet is 13 → 9, and the four
+heaviest subscribers are gone.
+
+### Every arm, reconciled
+
+```
+arm              mkts    stake        NET       pct
+paper_dir         222  27,281.12   -359.67    -1.32%
+paper_lock        222  34,148.60   +145.62    +0.43%
+paper100_spot     106   1,395.53    +50.26    +3.60%
+paper100_fav       86     999.50     -0.21    -0.02%
+paper100_filt      81     901.11    +15.54    +1.72%
+paper_hour          6     199.50    -17.71    -8.87%
+paper_fav5         27     433.01    -13.10    -3.03%
+paper_dog5         21     304.97    -43.84   -14.37%
+stale5              3      50.15    -10.47   -20.87%
+```
+
+The two 222-market arms are the line worth reading: **$27,281 and $34,149 of
+turnover on identical markets, netting -1.32% and +0.43%.** Straddling zero on
+that much turnover is what "no edge" looks like when it is finally measured
+properly, and it is the same answer sections 41, 42, 45 and 51 reached from four
+other directions.
+
+### Samples that are not yet samples
+
+- `paper_fav5` / `paper_dog5`: 27 and 21 markets. Both negative, as the
+  complement constraint requires, and the 11-point gap between them is the right
+  sign for the favourite effect — **and 27 markets says nothing**. No conclusion.
+- `paper_hour`: 6 markets. No conclusion.
+- `maker_fav` / `maker_dog`: relaunched 6 minutes ago after the queue fix, zero
+  settlements. No conclusion.
+- `stale5`: 3 markets, and its whole purpose is now in doubt given that the
+  staleness it records is partly my own dropped sockets.
