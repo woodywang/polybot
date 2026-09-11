@@ -463,3 +463,39 @@ Two arms failed to start with every flag reported unrecognised, twice, and the
 code was never at fault: **the session shell is zsh, which does not word-split
 unquoted parameter expansions.** A variable holding the flag list arrived as one
 argument. Args are written literally now.
+
+---
+
+## 12. Are the paper fills real? Measured, then charged
+
+Every P&L here assumes the displayed ask is still there 250 ms later. Quote
+persistence over 197k observations says that assumption is close to fair in the
+mean but has a fat tail:
+
+| latency | unchanged | improved | worsened | mean drift | p90 adverse |
+|---|---|---|---|---|---|
+| 250 ms | 79% | 11% | 10% | −0.009¢ | 4.00¢ |
+| 500 ms | 70% | 15% | 15% | −0.020¢ | 5.00¢ |
+| 2000 ms | 49% | 26% | 25% | −0.063¢ | 7.00¢ |
+
+That is the **unconditional** figure, and it is the wrong one. The quotes worth
+hitting are exactly the ones most likely to move. Splitting 5,356 samples by the
+model's edge:
+
+| model edge | samples | quote move after 250 ms |
+|---|---|---|
+| Q1 (most negative) | 1,071 | **−1.162¢** (in our favour) |
+| Q3 | 1,071 | −0.002¢ |
+| Q5 (most positive) | 1,072 | **+0.140¢** (against us) |
+| would open (edge > 0.01) | 1,197 | **+0.130¢** |
+| would skip (edge ≤ 0) | 3,762 | **−0.343¢** |
+
+A 0.47¢ spread between the quotes the model wants and the ones it passes on.
+Whether this is adverse selection or mean reversion in a low ask, the practical
+consequence is identical: **the price that looks mispriced is not the price you
+get.** At 0.130¢ against a ~1.6¢ gross edge it is about **8%** — real, far
+smaller than the 4¢ p90 tail implies, and not disqualifying.
+
+It is now charged rather than noted: `--slippage` (default 0.0013/share) is
+added to every simulated fill, so all subsequent paper results are conservative
+by the measured amount.

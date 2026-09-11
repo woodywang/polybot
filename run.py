@@ -554,6 +554,12 @@ async def fill(st, kind, slug, side, tok, snap, cap):
         ask, depth = st.books.get(tok, Book()).best_ask()
         if ask is None or depth <= 0:
             return
+        # Measured adverse selection, charged rather than assumed away. Over
+        # 5,356 samples the quotes the model wanted moved +0.130c against us in
+        # 250ms while the ones it passed on moved 0.343c in our favour -- the
+        # price that looks mispriced is not the price you get. It is about 8%
+        # of a 1.6c gross edge, so the paper fill pays it.
+        ask = min(ask + st.cfg.slippage, 0.999)
         if kind == "open":
             ed = fair.edge(snap["fair"], ask)
             if ed <= 0 or ask > st.cfg.max_price:
@@ -1070,6 +1076,9 @@ if __name__ == "__main__":
     p.add_argument("--bankroll", type=float, default=1000.0)
     p.add_argument("--kelly", type=float, default=0.25,
                    help="Kelly fraction for directional legs; 0 = flat max-usd")
+    p.add_argument("--slippage", type=float, default=0.0013,
+                   help="adverse selection charged on every simulated fill, in "
+                        "dollars per share; measured, not assumed")
     p.add_argument("--max-dd", type=float, default=0.25,
                    help="stop opening new legs once equity is this far below "
                         "its peak; hedging existing inventory continues")
