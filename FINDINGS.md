@@ -2784,3 +2784,50 @@ completely:
   magnitude.
 
 The book was never mispricing anything worth having.
+
+---
+
+## 53. There are no liquidity rewards on the crypto hourlies
+
+Polymarket runs a maker-incentive program, and the whole maker case would look
+different if it paid here: rewards are income that does not care whether the
+spread survives adverse selection. The market metadata answers it.
+
+Every market carries `rewardsMaxSpread` (4.5¢) and `rewardsMinSize`, which look
+like an active program but are defaults present everywhere. The field that says
+a pool actually exists is `clobRewards` with a `rewardsDailyRate`:
+
+```
+slug                                           vol24h   rewards  minSize
+will-there-be-no-change-in-fed-interest-rat 5,882,117  1,000.00      200
+will-the-fed-increase-interest-rates-by-25- 4,636,106  1,000.00      200
+lal-sev-val-2026-09-11-sev                  4,080,674      0.00       50
+atp-zverev-khachan-2026-09-11               3,069,859      0.00       50
+```
+
+On `bitcoin-up-or-down-...-4pm-et` the key is **absent entirely**. The program
+is real and pays $1,000 a day on the Fed markets; it pays nothing on the crypto
+hourlies. A maker here earns the spread and only the spread, which is what
+section 46 assumed and is now checked rather than assumed.
+
+Two further constraints the metadata settles:
+
+- `rewardsMinSize = 50` shares — about $30 a quote at 60¢, so two-sided
+  qualifying size is ~$60. Against the $100 accounts this project is sized for,
+  the program would be unreachable even where it pays.
+- `orderMinSize = 5` shares (~$3) and a 1¢ tick, so the arms' $3 stakes sit
+  exactly at the minimum tradable size. Nothing smaller is expressible.
+
+### The capacity arithmetic, and why it implies the answer
+
+That market shows $3,525 of book liquidity against $9,960 of 24-hour volume. A
+$100 account is 2.8% of the book, and quoting at the touch earns better than
+proportional fill share. Even at 3-5% of flow that is $300-500 of notional a
+day, roughly 500-800 shares, and at the 1¢ half-spread that is $5-8 a day on
+$100 — **5 to 8 percent per day, gross.**
+
+A number that large is not an opportunity, it is a description of what adverse
+selection must be taking. If posting at the touch here paid 5% a day net, the
+spread would already be narrower. The gross figure is precisely why the markout
+measurement is the only thing that matters, and it is what `makercheck.py` has
+been running for the last hour.
