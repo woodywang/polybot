@@ -1982,3 +1982,58 @@ Not one reaches |t| = 2, let alone the 2.64 the six-arm Bonferroni demands —
 and the two arms with the largest samples (183 markets each) sit at −0.07% and
 −2.17% net. Section 39's "one live arm crosses t = 2" does not survive either:
 it was measuring the inflated total.
+
+---
+
+## 41. Predicted edge does not predict realised P&L
+
+Section 40 collapsed the strategy to two directional bets, which leaves exactly
+one thing that can make money: the model's edge at entry being real. That is now
+measured directly. Every traded leg is bucketed by its predicted edge per share
+and compared against what the share actually paid, with t clustered at market
+level because legs inside one market share an outcome.
+
+```
+paper_dir                          paper_lock
+pred edge  legs   pred    real  t     legs   pred    real  t
+0-2c       1004  0.0133 -0.0323 -1.63 1064  0.0137 -0.0129 -0.73
+2-4c        689  0.0287 -0.0322 -1.34  877  0.0290 +0.0113 +0.55
+4-6c        233  0.0498 -0.0562 -2.37  356  0.0491 +0.0059 +0.17
+6-8c        123  0.0691 +0.0534 +0.83  176  0.0697 +0.0116 +0.19
+8-10c        95  0.0908 -0.0733 -1.06   96  0.0894 +0.0153 +0.22
+10-12c       51  0.1108 +0.0360 +0.40   73  0.1079 -0.0199 -0.31
+12c+        413  0.2653 +0.1139 +2.36  250  0.2204 -0.0093 -0.19
+```
+
+No monotone relationship anywhere. The two largest arms disagree in sign in
+five of seven buckets. `paper_dir`'s 12c+ cell is the one result that looks
+like something — 413 legs, predicted 26.5¢, realised +11.4¢, t = 2.36 — and
+`paper_lock`, the independent replication on the same 183 markets, puts the
+same bucket at **−0.9¢**. It does not replicate.
+
+Across five arms × seven buckets, 35 cells produce three at |t| > 2. Chance
+produces 1.6. This is noise with the shape of a result.
+
+### Everything now points the same way
+
+| measurement | result |
+|---|---|
+| offline spot rule, live quotes (§19) | +0.68¢, t = 0.27 |
+| open legs held to settlement (§40) | +6.35%, −1.37%, −5.74%, +2.47%, −8.42% |
+| hedge legs held to settlement (§40) | no arm reaches \|t\| = 2 |
+| predicted edge vs realised (this section) | flat, non-monotone, non-replicating |
+
+The book prices these contracts about as well as the model does. **The model's
+residual edge over the book is nil**, and that is not a filtering problem —
+no filter recovers signal from a quantity that carries none.
+
+### What that leaves
+
+The taker fee is `7% × (1-p)` of stake — **3.5% at the money, per trade**. Against
+a measured edge indistinguishable from zero, the fee is the entire story. The
+only remaining way to be profitable is to stop paying it: post rather than take.
+That was closed on 5-minute markets for a mechanical reason — the measured queue
+takes 6.6 minutes to clear in a 5-minute market — but that argument does not
+carry to the hourly markets, where the same queue sits inside a 60-minute window
+against 10× the liquidity. That is the next thing to measure, and it is the last
+structurally different idea this project has left.

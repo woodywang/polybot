@@ -1073,6 +1073,43 @@ def report(a):
               f"   won {l_won}/{l_legs}")
         print(f"  per market ${mu:+.4f}  sd ${sd:.4f}  t={tt:+.2f}"
               f"   (needs |t|>2.64 under the six-arm Bonferroni)")
+
+    # --- does predicted edge predict anything?
+    # Section 40 collapsed the strategy to two directional bets, so the only
+    # lever left is whether the model's edge at entry is real.  This is a
+    # calibration test on the quantity that actually drives sizing: bucket
+    # every traded leg by predicted edge per share and compare against what
+    # the share paid.  A working model slopes up and sits near the diagonal.
+    # t is clustered at market level -- legs inside one market share an
+    # outcome and are not independent observations.
+    eb = {}
+    for slug, side, ed, px, sz, fee in db.execute(
+            "SELECT slug,side,edge,fill_px,fill_sz,fee FROM obs"
+            " WHERE fill_sz IS NOT NULL AND edge IS NOT NULL"):
+        if slug not in res or not sz:
+            continue
+        b = min(int(ed * 100 // 2), 6)             # 2c buckets, 12c+ pooled
+        real = ((1.0 if res[slug] == side else 0.0) - px) * sz - fee
+        e = eb.setdefault(b, [0, 0.0, 0.0, 0.0, {}])
+        e[0] += 1
+        e[1] += sz
+        e[2] += ed * sz
+        e[3] += real
+        e[4][slug] = e[4].get(slug, 0.0) + real
+    if eb:
+        print("\npredicted edge vs realised, per traded leg (open + lock)")
+        print(f"  {'pred edge':<12}{'legs':>6}{'mkts':>6}"
+              f"{'pred $/sh':>11}{'real $/sh':>11}{'t':>8}")
+        for b in sorted(eb):
+            n, sh, pr, rl, per = eb[b]
+            v = list(per.values())
+            mu = statistics.mean(v)
+            sd = statistics.stdev(v) if len(v) > 1 else 0.0
+            tt = mu / (sd / math.sqrt(len(v))) if sd else 0.0
+            lbl = f"{b*2}-{b*2+2}c" if b < 6 else "12c+"
+            print(f"  {lbl:<12}{n:>6}{len(per):>6}"
+                  f"{pr/max(sh,1e-9):>11.4f}{rl/max(sh,1e-9):>11.4f}{tt:>+8.2f}")
+
         gap = (pp + np_) - ((c_pay - c_cost) + (l_pay - l_cost))
         print(f"  identity check: pairs+residue - (opens+hedges) = ${gap:+.4f}"
               f"   {'OK' if abs(gap) < 0.01 else '<<< BROKEN'}")
