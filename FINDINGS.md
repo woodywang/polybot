@@ -3339,3 +3339,58 @@ aggregate, and it is unpredictable at every horizon tested. It sets a noise
 floor on this instrument that no model removes: **anyone pricing these
 contracts, including the book, is working with a settlement reference they can
 only estimate.** That is a reason the book is hard to beat, not a way to beat it.
+
+---
+
+## 62. The feed fix worked, and it reopens the only surviving hypothesis
+
+Section 60 removed the client-side receive-queue limit (`max_queue=None`) on the
+grounds that the library's default 32-frame buffer was pushing backpressure onto
+Polymarket's send buffer and earning a `1013 slow consumer` close. Two
+independent checks now say it worked.
+
+**Disconnects.** Three 5-minute arms have run since the change with **0
+slow-consumer drops**, against a prior rate of 0.25/min per arm.
+
+**The websocket book now agrees with the CLOB REST book.** `stalecheck.py`,
+rerun unchanged except for the same one-line fix:
+
+```
+                       before      after
+stale observations        30          16
+  REST disagrees           8 (27%)     0 (0%)
+  book empty              10           0
+  real quote, confirmed   12          16
+```
+
+Fisher exact on the disagreement rate gives p ~ 0.04. The empty-book cases
+vanished too, which fits: a book that looked empty was a book whose updates I
+had missed. **Every websocket/REST disagreement in section 54 — up to 14 cents,
+always in the flattering direction — was my own dropped socket.**
+
+### What that changes
+
+Section 54 concluded that stale quotes "cannot be tested with this harness"
+because the instrument was lying a quarter of the time. That was true then and
+is not true now. All 16 stale observations are **REST-confirmed resting quotes**
+— a book that has sat untouched for 22 seconds at 0.49/0.50 is an order somebody
+left there.
+
+This matters because stale quotes are the **last surviving explanation** for the
+account in section 1, which pays $46,573 of taker fees and clears 1.64c a share
+where the displayed quote returns -1.70c. Section 57 killed "partly a maker"
+with a -15c markout. What remained was "faster than the book on a feed that does
+not go dead" — and the feed has just stopped going dead.
+
+`stale5` is collecting again with `--log-stale 1`, and `report()`'s
+taker-net-by-quote-age block will score it. The trading guard stays at
+`--max-stale 20`, so the arm still refuses to trade what it is measuring.
+
+### A note on what fixed it
+
+The bug was one keyword argument, and it had been corrupting the project's
+most-used instrument for its entire life. It was not found by inspecting the
+code — it was found by asking why the hourly arms had **zero** disconnects while
+the 5-minute arms had hundreds, and then measuring the difference: 19x the
+frames, 20x the bytes. **The asymmetry was the clue, and it was in the logs from
+the beginning.**
