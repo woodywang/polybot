@@ -4493,9 +4493,9 @@ to know than another negative result.
 
 ## 82. The book reacts in 200 milliseconds, and that is the first number in the right range
 
-> **Under audit — see section 84.** Both feeds arrive in one event loop, so
-> part of that 200ms may be this process rather than the book. `clockcheck.py`
-> is measuring the difference from exchange timestamps.
+> **Audited in section 85 — the correction goes the other way.** My Binance
+> path is slow and my Polymarket path is fast, so the true book lag is ~302ms,
+> not 200ms.
 
 `latency.py` cross-correlated Binance mid returns against Polymarket mid returns
 on 100ms bars for 25 minutes of one 5-minute market:
@@ -4685,3 +4685,76 @@ This is the same discipline that has paid for itself all day: sections 56, 60,
 number. **A result that finally fits is the worst possible moment to stop
 checking the instrument** — it is precisely when the temptation to believe is
 strongest and when every previous mistake was made.
+
+---
+
+## 85. The audit found the opposite artifact
+
+Section 84 worried that the 200ms lag was my own queueing: the Polymarket feed
+outruns its consumer, so its messages might sit longer than Binance's and make
+the book look slow. `clockcheck.py` measured `arrival - exchange timestamp` for
+each feed, 12 minutes:
+
+```
+binance      n=  3,481   median 115.8ms   p90 344.8ms   p99 861.6ms
+polymarket   n=116,552   median  13.4ms   p90  29.5ms   p99 180.1ms
+```
+
+**Backwards from the fear.** The Polymarket path is *fast* — 13.4ms median, and
+that is with 116,552 messages in 12 minutes. It is the **Binance** path that is
+slow, at 115.8ms with a long tail.
+
+Correcting section 82:
+
+```
+observed lag (arrival times)     200 ms
+  my binance delay             115.8 ms
+  my polymarket delay           13.4 ms
+  correction                  -102.4 ms
+-> true book lag                 302 ms
+```
+
+The book lags Binance by about **300 milliseconds**, not 200. The audit made the
+finding *larger*, which is the outcome I was least prepared for and the reason
+the audit was worth running rather than reasoning about.
+
+### What it changes
+
+```
+                  window   p90 travel   ticks
+as measured       200ms       1.77c      1.77
+corrected         302ms       2.17c      2.17
+```
+
+The account's measured gross edge is 1.64c. The corrected figure **overshoots**
+it, where the uncorrected one landed within 8%. So the audit weakens the
+numerical correspondence of section 82 while strengthening the underlying
+mechanism — the window is real and bigger than measured, but the neat match to
+the account was partly luck.
+
+More usefully, it gives the budget precisely:
+
+```
+I learn of a Binance move at   +116 ms
+the book moves at              +302 ms
+                               -------
+budget for decision + order     187 ms
+```
+
+**187 milliseconds** to decide and land an order. Not obviously impossible —
+which is a different answer from "unreachable", and the first time this project
+has had a number for it.
+
+### The caveat that cannot be removed here
+
+All of this rests on Binance's and Polymarket's server clocks agreeing. A 100ms
+skew between them would move the whole result, and nothing on this machine can
+measure that. What argues against pure skew is the *shape*: Binance's delay has
+a long tail (p90 344ms, p99 862ms) characteristic of network queueing, while a
+clock offset would be tight. Polymarket's is tight (p90 29.5ms), consistent with
+a short, stable path.
+
+So the differential is real in direction and roughly right in size, and the
+absolute numbers carry an unmeasurable offset. **The ETH replication running now
+tests whether the 200ms peak reappears at all**; if it does not, everything above
+is moot.
