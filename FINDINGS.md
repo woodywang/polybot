@@ -2736,3 +2736,51 @@ experiment. What is left of the maker case is the half-spread alone — about 1�
 a share, exactly what section 46 said before the book-bias detour — against a
 mid that moves 0.5¢ in ten seconds. `makercheck.py` still decides that, and the
 fill assumption remains the one thing no file here has ever tested.
+
+---
+
+## 52. The momentum is real and worth half a basis point
+
+Section 44's persistence result survives every correction: it uses no fitted
+parameter, no band conditioning, and reproduces at t = 3.3 to 9.3 on 8,600
+windows. So the natural question is whether it is worth anything *anywhere* —
+Polymarket charges `7% × (1-p)` of stake, but the same five minutes of BTC trade
+on Binance at about 4 basis points round trip, a thousand times cheaper.
+
+Go long the direction the window has already moved, hold to the close:
+
+```
+asset     j   trades  mean bps       t   after 4bps
+BTCUSDT   1    8,236    -0.137   -1.11      -4.14
+BTCUSDT   3    8,508    +0.103   +1.30      -3.90
+ETHUSDT   3    8,563    +0.245   +2.25      -3.76
+ETHUSDT   4    8,587    +0.162   +2.14      -3.84
+SOLUSDT   2    8,109    +0.484   +2.63      -3.52
+SOLUSDT   4    8,239    +0.233   +2.45      -3.77
+```
+
+**0.08 to 0.48 basis points.** Statistically present in ETH and SOL at t > 2,
+and eight to fifty times too small to pay a fee that is itself a rounding error
+next to Polymarket's.
+
+### Why a real effect is worth nothing
+
+Sign persistence and expected return are different quantities, and this is the
+gap between them. The Brownian baseline `1/2 + arcsin(sqrt(t/T))/pi` scores only
+*which way* the window closes. A price can keep its direction 2.3 points more
+often than a martingale allows while earning nothing, provided the extra
+continuations are small and the reversals are large — which is exactly what the
+numbers say. **A statistically solid edge in the sign carries no edge in the
+money.**
+
+That is the last open thread from section 44, and it closes the momentum line
+completely:
+
+- The persistence is real — 8,600 windows, nothing fitted.
+- It is worth under half a basis point.
+- Polymarket's taker fee is ~350 basis points of stake at the money.
+- Binance's round trip is ~4.
+- It does not clear either, and it misses Polymarket by three orders of
+  magnitude.
+
+The book was never mispricing anything worth having.
