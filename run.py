@@ -742,6 +742,15 @@ def maker_step(st, slug, side, tok, snap, now, mid):
     if bid is not None and st.cfg.maker_improve:
         bid = round(bid + 0.01 * st.cfg.maker_improve, 4)
         qsz = 0.0
+    # Improving the bid costs a tick, so what is left to capture is
+    # (spread/2 - tick).  Section 63 read that as a flat -0.5c from five fills
+    # that all happened to be on a 1c spread; the hourly book is 1c only half
+    # the time, is 2c a fifth, and is 3c or wider a quarter -- where a
+    # one-tick improvement still captures +0.5c to +3.0c.  Gate on the capture
+    # actually available rather than assuming the spread.
+    if bid is not None and mid - bid < st.cfg.maker_min_capture:
+        st.rest.pop(tok, None)
+        return
     if (bid is None or not st.cfg.min_ask <= mid <= st.cfg.max_price
             or snap["tau"] <= st.cfg.min_tau_open or st.halted):
         st.rest.pop(tok, None)
@@ -1743,6 +1752,10 @@ if __name__ == "__main__":
                         "equity.  A drawdown limit stops opening but cannot "
                         "stop committed capital from settling against you; "
                         "this is what bounds the overshoot.  0 = uncapped.")
+    p.add_argument("--maker-min-capture", type=float, default=-1.0,
+                   help="only post when (mid - post price) is at least this. "
+                        "With --maker-improve 1 that means only quoting where "
+                        "the spread is wide enough to pay for the tick.")
     p.add_argument("--maker-improve", type=int, default=0,
                    help="post this many ticks above the best bid, buying queue "
                         "priority at the cost of the spread it was earning.")

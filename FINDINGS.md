@@ -3402,6 +3402,11 @@ the beginning.**
 
 ## 63. The tick grid makes passive making impossible, which is stronger than section 57
 
+> **Overstated — see section 67.** The -0.5c penalty is not a property of the
+> grid, it is `spread/2 - tick`, and those five fills all happened to sit on a
+> 1c spread. A quarter of in-band quotes are 3c or wider, where a one-tick
+> improvement still captures +0.5c to +3.0c.
+
 Section 57 argued making was closed by a dilemma: behind the queue you fill only
 on sweeps (-15c markout), and the escape — improving the bid a tick for queue
 priority — "hands over the entire gross edge", leaving edge 0. The live arms say
@@ -3603,3 +3608,70 @@ hourly instrument, the pick-off opportunity does not exist.
 settlements. **Nothing in this round's P&L table supports a conclusion.** What
 the round produced is three corrections and one closed avenue, and those came
 from diagnostics, not from the ledger.
+
+---
+
+## 67. Section 63 generalised from five fills that shared a spread
+
+Section 63 concluded that making is "arithmetically closed by the tick size",
+because every `maker_front` fill showed a capture of exactly -0.0050: with a 1c
+spread and a 1c tick, improving the bid lands half a cent *above* the mid.
+
+The sixth fill showed `capture +0.0000`. That is not noise — it is the same
+formula with a different input:
+
+```
+front-of-queue capture = spread/2 - tick
+```
+
+The first five fills all happened on a 1c spread. That is not what the book
+does the rest of the time. Over 12,182 in-band hourly quotes:
+
+```
+spread   quotes   share   capture
+   1c     6,039   49.6%    -0.5c
+   2c     2,740   22.5%     0.0c
+   3c     1,364   11.2%    +0.5c
+   4c       479    3.9%    +1.0c
+   5c       282    2.3%    +1.5c
+   6c       220    1.8%    +2.0c
+   7c       405    3.3%    +2.5c
+   8c       374    3.1%    +3.0c
+```
+
+**A quarter of the time (25.6%) the spread is 3c or wider, and a one-tick
+improvement still captures +0.5c to +3.0c** — averaging **+1.33c** across those
+quotes. Section 63 took a property of half the book and asserted it of all of it.
+
+### What that leaves
+
+This is the first configuration in the project that is not closed on arithmetic:
+
+```
+capture when spread >= 3c        +1.33c   (exposure-weighted over those quotes)
+book mid bias (section 65)       +0.39c
+                                 ------
+gross per fill                   +1.72c   with queue priority, no fee
+```
+
+Against which stands the only thing that has ever eaten a maker here: section
+57's markout. That measurement was taken **at the touch**, where fills arrive
+only via sweeps. Whether a front-of-queue order in a *wide* book is selected the
+same way is a different question and an untested one — plausibly better, since
+you are no longer the last stop of a sweep, and plausibly worse, since a wide
+spread is what makers quote when they are uncertain.
+
+`--maker-min-capture` gates on the capture actually available rather than
+assuming the spread, and `maker_wide` is running it at 0.005 (quote only where a
+tick still leaves half a cent). No fills yet: it quotes roughly a quarter of the
+time and still needs someone to sell into it.
+
+### The habit this keeps catching
+
+Three sections in a row now have been corrected for the same reason, and it is
+not carelessness about arithmetic — every one of them was arithmetically right.
+It is **generalising from the cases the data happened to contain**: the cheap
+pairs were all conditioned on having been right, the fast-exiting markets were
+all conditioned on having resolved, and these five fills were all conditioned on
+a 1c spread. The error is never in the calculation. It is in the silent "and
+this is what always happens".
