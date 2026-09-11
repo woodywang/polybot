@@ -499,3 +499,60 @@ smaller than the 4¢ p90 tail implies, and not disqualifying.
 It is now charged rather than noted: `--slippage` (default 0.0013/share) is
 added to every simulated fill, so all subsequent paper results are conservative
 by the measured amount.
+
+---
+
+## 13. The robust half of the anomaly is the refusal, not the selection
+
+Splitting the favourite-longshot result by asset weakens it considerably:
+
+| asset | obs | markets | favourite wins | implied | excess |
+|---|---|---|---|---|---|
+| BTC | 740 | 31 | 78.5% | 69.7% | **+8.8 pt** |
+| ETH | 731 | 31 | 77.4% | 68.8% | **+8.7 pt** |
+| SOL | 658 | 31 | 69.6% | 70.5% | **−0.9 pt** |
+
+**One asset in three shows nothing.** Any claim about buying favourites has to
+carry that.
+
+Per-share economics after the real fee and the measured slippage:
+
+| favourite's price | obs | win rate | gross | fee | slip | net | on stake |
+|---|---|---|---|---|---|---|---|
+| 0.5–0.6 | 760 | 65.4% | +12.22¢ | −1.74¢ | −0.13¢ | +10.34¢ | **+19.5%** |
+| 0.6–0.7 | 420 | 65.7% | +1.32¢ | −1.60¢ | −0.13¢ | −0.41¢ | **−0.6%** |
+| 0.7–0.8 | 329 | 78.7% | +3.96¢ | −1.32¢ | −0.13¢ | +2.51¢ | +3.4% |
+| 0.8–0.9 | 271 | 87.1% | +2.99¢ | −0.94¢ | −0.13¢ | +1.93¢ | +2.3% |
+| 0.9–1.0 | 349 | 96.6% | +0.90¢ | −0.29¢ | −0.13¢ | +0.48¢ | +0.5% |
+
+Positive on average but **not monotone** — the 0.6–0.7 bucket is negative. Weak.
+
+The other side is the opposite:
+
+| underdog's price | obs | win rate | net | on stake |
+|---|---|---|---|---|
+| 0.0–0.1 | 349 | 3.4% | −1.32¢ | **−30.5%** |
+| 0.1–0.2 | 271 | 12.9% | −4.06¢ | **−25.5%** |
+| 0.2–0.3 | 304 | 22.4% | −3.91¢ | **−15.7%** |
+| 0.3–0.4 | 402 | 32.3% | −4.17¢ | **−12.0%** |
+
+**Every bucket loses, monotonically in how cheap it is.** Because the fee is
+`7% × (1-p)` of stake — 6.3% at a dime — buying the cheap side pays the most
+expensive rate for the model's least reliable estimate.
+
+So the durable rule is a refusal: **do not buy the cheaper side.** It survives
+per-asset, it is monotone, and it needs no claim about alpha. Buying favourites
+is the weaker half — positive on average, non-monotone, absent in SOL. This also
+retires `--min-ask 0.25`: the 0.25–0.50 band loses at every step, so the line
+belongs at 0.50.
+
+### The arms are now a 2×2
+
+| arm | favourite filter | VRP filter |
+|---|---|---|
+| `paper100_base` | — | — |
+| `paper100_fav` | ask ≥ 0.50 | — |
+| `paper100_vrp` | — | implied/realised ≥ 1.5 |
+| `paper100_filt` | ask ≥ 0.50 | implied/realised ≥ 1.5 |
+
+Each factor alone and both together, against a control, on one feed.
