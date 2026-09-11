@@ -5020,3 +5020,71 @@ The pattern is worth naming because it survived being explicitly identified
 twice. Knowing that account state must outlive the process did not stop me from
 inventing the account state I was missing. **A reconstruction is only as good as
 the thing it reconstructs from, and "100" came from nowhere.**
+
+---
+
+## 91. Review: what is left is one pending replication and one slow collector
+
+### (1) Health
+
+```
+observer      drops 12   errors 0   1,070 samples (548 Down / 522 Up), 33 settled
+latency(eth)  drops  0   errors 0   12 min remaining
+ledger identity  $0.0000  OK
+quote age        avg 0.068s   max 1.96s
+```
+
+Balanced sides confirm the observer is recording the *unselected* population
+section 42 needs — every clean-feed arm before it carried `--fav-only`, which
+gates before the sample is written.
+
+`observer` has taken 12 slow-consumer drops as the only 5-minute subscriber,
+which is the settled answer from section 73: not contention, not token count,
+just the intrinsic message rate of one active book against one event loop.
+
+### (2) Reports
+
+Totalled in section 90: **20 arms, $69,801.97 turnover, NET -$280.21, -0.40%**.
+The two largest, on identical markets, are -1.35% and +0.43%.
+
+### (3) What this round learned, and what it overturned
+
+**Overturned — my own record.** Section 90: the `meta` backfill assigned
+`bankroll = 100` to twelve files whose bankroll was never recorded, producing an
+impossible 642% drawdown. Deleted and marked unknown. Their P&L stands; their
+drawdown percentages do not.
+
+**Overturned — section 84's worry.** It feared the 200ms lag was my own queueing
+delay. Section 85 measured the opposite: my Polymarket path is fast (13.4ms) and
+my *Binance* path is slow (115.8ms), so the true lag is **larger**, ~302ms.
+Confirmed clock-skew-free by RTT, which agreed to 0.6ms (§86).
+
+**Learned.** Settlement integrity is perfect on hourly markets — 1,581 of 1,581
+(§87) — and the 5-minute settlement is ~14% unobservable from Binance (§88),
+which is the single structural fact behind every other difference between the
+two instruments.
+
+**Learned.** The 302ms is not an opportunity, it is the market's aggregate
+reaction time (§86). Arriving at 302ms is arriving as the trade closes.
+
+### (4) Adjustments: none, and why
+
+No new arm is justified and none was started.
+
+- Every taker and maker route is closed by direct measurement.
+- The one open lead — the ~302ms window — cannot be traded from here, and a
+  paper arm would report fills that could not happen, which is the single
+  assumption (§89) that would make every number optimistic in the same
+  direction. **Building it would be manufacturing the result.**
+- The right use of compute is the ETH replication, which exists to *falsify* the
+  latency finding, not extend it.
+
+### Samples
+
+`observer`: **33 settled markets against the 168 section 42 used.** At 27
+markets/hour it reaches parity around **05:00 UTC**. Nothing concludable from it
+this round or the next four. That is arithmetic available now, not a discovery
+waiting to be made.
+
+`latency(eth)`: pending. If the 200ms peak does not reappear, sections 82, 85 and
+86 are struck.
