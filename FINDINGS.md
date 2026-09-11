@@ -3675,3 +3675,63 @@ pairs were all conditioned on having been right, the fast-exiting markets were
 all conditioned on having resolved, and these five fills were all conditioned on
 a 1c spread. The error is never in the calculation. It is in the silent "and
 this is what always happens".
+
+---
+
+## 68. The spread is in equilibrium with the volatility, which is Glosten-Milgrom in one table
+
+Section 67 found the first configuration not closed on arithmetic: quoting a
+tick above the bid only where the spread is 3c or wider captures +1.33c on
+average. The obvious objection is that makers widen when they expect to be run
+over, so the capture is paid for in adverse selection. That is testable directly
+from 106k hourly paired quotes — how far the mid travels after a quote, as a
+function of the spread at that moment:
+
+```
+spread        n    |move| 30s   |move| 120s   front-of-queue capture
+   1c    46,087       1.00c        3.00c            -0.5c
+   2c    19,513       2.00c        4.50c             0.0c
+   3c    14,646       2.00c        3.50c            +0.5c
+   4c     6,905       1.50c        3.50c            +1.0c
+   5c     5,079       1.50c        3.50c            +1.5c
+   6c     4,142       2.00c        5.00c            +2.0c
+   7c     4,644       2.50c        6.50c            +2.5c
+   8c     2,102       3.00c        7.50c            +3.0c
+```
+
+Read the last two columns against each other at 5c and wider:
+
+```
+spread 5c   capture +1.5c   travel 1.5c
+spread 6c   capture +2.0c   travel 2.0c
+spread 7c   capture +2.5c   travel 2.5c
+spread 8c   capture +3.0c   travel 3.0c
+```
+
+**Identical, to the cent, across four spread levels.** The market is quoting a
+spread of almost exactly twice the 30-second mid travel — makers are pricing the
+spread to compensate for exactly the move they expect while the order rests.
+
+That is Glosten-Milgrom showing up in raw data: the spread is not a fee the
+market charges out of habit, it is **the price of adverse selection**, and it is
+set correctly here. It also explains why every maker configuration this project
+has tried lands near zero before costs. There was never going to be a spread
+wide enough to be free, because what makes a spread wide is exactly what makes
+it necessary.
+
+### What it means for `maker_wide`
+
+The comparison above uses **unconditional** travel — how far the mid moves after
+any quote. What a maker actually suffers is the move *conditional on having been
+filled*, and a fill is someone choosing to trade with you, so conditional travel
+is strictly worse. Capture equalling unconditional travel therefore implies
+capture **below** adverse selection.
+
+So the honest prediction for `maker_wide` is that it loses, but by much less
+than at the touch: -15c (section 57) was a 1c-spread book where the capture is
+-0.5c before anything happens. Here capture and volatility are matched, so the
+loss should be the conditioning alone.
+
+That is a falsifiable prediction with a sign and a rough size, made before the
+arm has a single settlement, which is the most useful thing this project can do
+with a hypothesis it expects to fail.
