@@ -2899,3 +2899,45 @@ than answered with an instrument known to be lying 27% of the time.
 The remaining candidates for the account's 2.5¢: it is partly a maker (the fee
 figure is an average, and maker fills pay nothing, which would shift the implied
 price), or it is faster than the book on a feed that does not go dead.
+
+---
+
+## 55. I reproduced the queuecheck bug in my own maker
+
+The maker arms took **zero fills across 2,054 in-band quotes** in their first
+half hour. The band was occupied 14.9% of the time, so the opportunity was
+there; the fills were not.
+
+The cause was in `maker_step`: it treated any change in the best bid as a cancel
+and replace, resetting queue position. `queuecheck.py`'s own docstring says why
+that is wrong, and says it about its own first two versions:
+
+> Versions one and two both ended a level when the BEST BID PRICE changed, which
+> is not what happens to an order. Somebody bidding higher does not cancel your
+> order at 0.50 — it just stops being the best bid, and it still fills if the
+> price comes back.
+
+That diagnostic measured level lifetimes of 0.04s and a fill rate near zero,
+both artifacts of the clock. I wrote the same mistake into the strategy four
+sections later and got the same symptom — a near-zero fill rate — from the same
+cause. Having written the lesson down is not the same as having learned it.
+
+Fixed: a resting bid now lives until it fills or the mid drifts `--maker-cancel`
+(default 4¢) away from it, which is what a real maker does. Maker mode also logs
+`sample` rows now; the first version `continue`d past the logging, so those arms
+recorded nothing for `--report` to score.
+
+### The other thing zero fills would have meant
+
+Worth separating, because the two failure modes look identical from outside:
+
+- **Unfillable** — the queue never clears, so the strategy has no capacity
+  regardless of its edge.
+- **Adversely selected** — it fills, and the fills lose.
+
+The measured trade rate makes the first a live concern independent of the bug:
+**7 trades in 90 seconds across 12 tokens**, roughly one per token every 2.6
+minutes, against resting size that a $3 order sits behind. A strategy whose edge
+is 1¢ a share needs volume to matter, and this instrument may simply not have
+it. `makercheck.py` reports both numbers — fill rate and markout — and it is the
+fill rate that decides whether the markout is even worth reading.

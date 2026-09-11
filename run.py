@@ -720,8 +720,19 @@ def maker_step(st, slug, side, tok, snap, now, mid):
         st.rest.pop(tok, None)
         return
     o = st.rest.get(tok)
-    if o is None or abs(o["price"] - bid) > 1e-9:
+    if o is None:
         st.rest[tok] = dict(price=bid, ahead=qsz, sold=0.0, born=now)
+        return
+    # An order does NOT die because someone else bid higher.  It stops being
+    # the best bid and still fills if the price comes back.  queuecheck.py v1
+    # and v2 made exactly this mistake -- closing a level when the best-bid
+    # PRICE changed -- and measured level lifetimes of 0.04s and a fill rate
+    # near zero, both artifacts of the clock.  The first maker_step reproduced
+    # it and took zero fills across 2,054 in-band quotes.  Only cancel when a
+    # real maker would: the price has drifted too far from the mid to be worth
+    # holding.
+    if abs(mid - o["price"]) > st.cfg.maker_cancel:
+        st.rest.pop(tok, None)
         return
     if o["sold"] < o["ahead"]:
         return
@@ -876,6 +887,10 @@ async def strategy(st):
                     m_up = (a_up + (1.0 - a_dn)) / 2.0
                     maker_step(st, slug, side, tok, snap, now,
                                m_up if side == "Up" else 1.0 - m_up)
+                    if now - last.get((slug, side), 0) > 20:
+                        last[(slug, side)] = now
+                        log(st, "sample", slug, snap, side, ask, depth,
+                            fair.edge(p, ask), stale=age)
                     continue
 
                 # --- confidence haircut: the random-walk null says the book is
@@ -1622,6 +1637,10 @@ if __name__ == "__main__":
     p.add_argument("--log-stale", type=int, default=0,
                    help="record stale quotes as samples instead of skipping "
                         "them.  Trading still respects --max-stale.")
+    p.add_argument("--maker-cancel", type=float, default=0.04,
+                   help="cancel a resting bid once the mid has moved this far "
+                        "from it.  A bid that is merely no longer best is "
+                        "still live and still fills.")
     p.add_argument("--maker", type=int, default=0,
                    help="post at the touch instead of taking.  Pays no fee and "
                         "earns the half-spread, at the cost of only filling "
