@@ -637,7 +637,13 @@ async def fill(st, kind, slug, side, tok, snap, cap):
         ask = min(ask + st.cfg.slippage, 0.999)
         if kind == "open":
             ed = fair.edge(snap["fair"], ask)
-            if ed <= 0 or ask > st.cfg.max_price:
+            # Re-check at fill time, since the price can move between the
+            # signal and the order.  `min(0, min_edge)` keeps the usual bar at
+            # zero and opens the gate only for a deliberately negative
+            # --min-edge, which is how a rule that ignores the model entirely
+            # (buy any side in a price band) gets tested without the model
+            # quietly vetoing half its entries.
+            if ed <= min(0.0, st.cfg.min_edge) or ask > st.cfg.max_price:
                 return
             room = st.cfg.max_per_market - st.held(slug, side)[1]
             room = min(room, st.equity - st.committed)      # cannot spend what is committed
@@ -778,6 +784,15 @@ async def strategy(st):
                 # snapshot, not a price anyone will fill.
                 if st.books[tok].stale_for(now) > st.cfg.max_stale:
                     continue
+
+                # --- favourite-only (1) or underdog-only (-1).  Near the money
+                # both asks sit above 0.50 -- they sum to about $1.035 -- so a
+                # price threshold cannot name a side and buys both.  The
+                # complement's quote can: the favourite is simply the dearer of
+                # the two at this instant.
+                if st.cfg.fav_only and a_up and a_dn:
+                    if (ask - (a_dn if side == "Up" else a_up)) * st.cfg.fav_only <= 0:
+                        continue
 
                 # --- confidence haircut: the random-walk null says the book is
                 # the consensus estimate and our p is one noisy model's opinion.
@@ -1131,15 +1146,68 @@ def report(a):
     if bb:
         print("\nbook calibration on sample quotes (all, not just traded)")
         print(f"  {'ask':<10}{'n':>7}{'mkts':>6}{'mean ask':>10}"
-              f"{'won':>8}{'net/sh':>9}{'t':>8}")
+              f"{'won':>8}{'net/sh':>9}{'+50% rb':>9}{'t':>8}")
         for b in sorted(bb):
             n, sa, sw, per = bb[b]
             v = [x[1] / x[0] for x in per.values()]
             sd = statistics.stdev(v) if len(v) > 1 else 0.0
             tt = statistics.mean(v) / (sd / math.sqrt(len(v))) if sd else 0.0
-            net = sw / n - sa / n - fair.taker_fee(sa / n)
+            fe = fair.taker_fee(sa / n)
+            net = sw / n - sa / n - fe
+            # The rebate is a refund of the fee capped at 50% (Obsidian tier),
+            # never money on top, so net + fee/2 is the ceiling for any taker
+            # at any volume.  It shifts every row up by half of 7%p(1-p) and
+            # changes no sign that matters.
             print(f"  {f'{b/10:.1f}-{b/10+0.1:.1f}':<10}{n:>7,}{len(per):>6}"
-                  f"{sa/n:>10.3f}{sw/n:>8.3f}{net:>+9.4f}{tt:>+8.2f}")
+                  f"{sa/n:>10.3f}{sw/n:>8.3f}{net:>+9.4f}"
+                  f"{net + fe / 2:>+9.4f}{tt:>+8.2f}")
+
+    starts = dict(db.execute(
+        "SELECT slug, start_ts FROM markets WHERE outcome IS NOT NULL"))
+    # --- near the money, does the book shrink toward 0.5?
+    # The 0.4-0.5 and 0.5-0.6 calibration cells miss in opposite directions,
+    # which is one claim seen from both sides: the favourite wins more than its
+    # price implies.  Two traps sank the first two attempts at this.
+    #   (1) "ask > 0.5" does not identify a side.  The two asks sum to about
+    #       $1.035, so near the money BOTH sit above 0.50 and the same instant
+    #       gets counted as two favourites.  Fixing it with a 0.54 floor
+    #       instead threw away the genuine mild favourites and the effect went
+    #       with them.  `pairs` quotes both sides at one instant, so the
+    #       favourite is simply the dearer one -- no threshold needed.
+    #   (2) btc, eth and sol resolve the same five minutes of the same risk
+    #       asset.  Three markets per window is one observation wearing three
+    #       hats; clustering per market inflates t by about sqrt(3).
+    # Staleness is the remaining worry, and the tau split is what separates it:
+    # a slow book looks exactly like an under-confident one, but only near
+    # expiry.
+    sk = {}
+    for slug, tau, au, ad in db.execute(
+            "SELECT slug,tau,ask_up,ask_dn FROM pairs WHERE tau IS NOT NULL"):
+        if slug not in res or au is None or ad is None:
+            continue
+        side, px = ("Up", au) if au > ad else ("Down", ad)
+        if px > 0.65:
+            continue
+        k = 0 if tau < 30 else (1 if tau < 90 else 2)
+        m = sk.setdefault(k, {}).setdefault(starts.get(slug, slug), [0, 0.0, 0.0])
+        m[0] += 1
+        m[1] += (1.0 if res[slug] == side else 0.0) - px
+        m[2] += (1.0 if res[slug] == side else 0.0) - px - fair.taker_fee(px)
+    if sk:
+        print("\nfavourite (dearer side) vs its own price, by time to expiry")
+        print(f"  {'tau':<10}{'quotes':>9}{'windows':>9}"
+              f"{'too timid':>12}{'net/sh':>10}{'t':>8}")
+        for k in sorted(sk):
+            v = [x[1] / x[0] for x in sk[k].values()]
+            nt = [x[2] / x[0] for x in sk[k].values()]
+            if len(v) < 5:
+                continue
+            sd = statistics.stdev(v) if len(v) > 1 else 0.0
+            tt = statistics.mean(v) / (sd / math.sqrt(len(v))) if sd else 0.0
+            print(f"  {('< 30s','30-90s','> 90s')[k]:<10}"
+                  f"{sum(x[0] for x in sk[k].values()):>9,}{len(v):>9}"
+                  f"{statistics.mean(v):>+12.4f}{statistics.mean(nt):>+10.4f}"
+                  f"{tt:>+8.2f}")
 
     # Same legs, bucketed by price paid instead.  The taker fee is 7%x(1-p) of
     # stake, so it costs 3.5% at the money and 0.14% at 98c: if any edge
@@ -1231,8 +1299,6 @@ def report(a):
     # A single favourable stretch can make any directional rule look brilliant.
     # Bucketing by wall-clock hour is the cheapest way to see the spread that a
     # drawdown limit would actually have to survive.
-    starts = dict(db.execute(
-        "SELECT slug, start_ts FROM markets WHERE outcome IS NOT NULL"))
     hourly = {}
     for slug, kind, side, *_ , px, sz, fee in rows:
         if kind != "open" or not sz or slug not in starts:
@@ -1348,6 +1414,11 @@ if __name__ == "__main__":
                    help="require implied/realised sigma above this before "
                         "opening; the trade pays when the book prices more "
                         "uncertainty than the tape delivers. 0 disables")
+    p.add_argument("--fav-only", type=int, default=0,
+                   help="1: only buy the dearer side, -1: only the cheaper, "
+                        "0: either.  Names a side by the complement's quote "
+                        "rather than by a price threshold, which near the "
+                        "money identifies both sides at once.")
     p.add_argument("--min-ask", type=float, default=0.0,
                    help="floor on the price paid; buying the favoured side is "
                         "the strongest predictor that a hedge will appear")

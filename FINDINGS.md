@@ -2098,3 +2098,69 @@ is to collect that fee rather than pay it. `makercheck.py` is measuring the
 markout on resting bids in the hourly markets now. If posted orders are
 adversely selected by more than the rebate is worth, this instrument has
 nothing in it and that is the finding.
+
+---
+
+## 43. The favourite beats its own price — measured three times, wrong twice
+
+The calibration table in section 42 has one structure in it worth chasing: the
+0.4-0.5 and 0.5-0.6 cells miss in **opposite** directions. That is not two
+findings, it is one — the side priced above the money wins more often than its
+price implies. A base-rate skew cannot produce it, because that would move both
+sides of a market the same way and the buckets pool both sides.
+
+Getting a number out of it took three attempts, and the first two were wrong in
+ways worth keeping.
+
+**Attempt 1 — clustered on the market.** Favourite defined as `ask > 0.5`,
+samples in 0.35-0.65, clustered per market: `+0.0905, t = +4.00` at tau > 90s.
+But btc, eth and sol resolve the same five minutes of the same risk asset.
+Three markets per window is one observation wearing three hats. Clustering on
+the **window** instead: `t = +2.48`. The sqrt(3) was exactly the correlation I
+had not priced.
+
+**Attempt 2 — "ask > 0.5" does not name a side.** The two asks sum to about
+$1.035, so near the money *both* sit above 0.50 and the same instant is counted
+as two favourites. Raising the floor to 0.54 forces the complement under 0.50
+and makes the rule expressible — and the effect collapsed to `t = +1.22` and
+`+0.39`. But that floor also discards the genuine mild favourites, so it is not
+the honest version either. Both attempts were measuring partly-undefined
+objects.
+
+**Attempt 3 — let the complement name the side.** The `pairs` table quotes both
+sides at the same instant, so the favourite is simply the dearer one. No
+threshold, no ambiguity, 207k paired quotes:
+
+```
+tau        quotes  windows   too timid   net/sh after fee      t
+< 30s       1,666       13     +0.0654        +0.0485       +0.62
+30-90s      6,547       45     +0.0739        +0.0571       +1.75
+> 90s      62,606       64     +0.0504        +0.0335       +1.87
+```
+
+Consistent in sign across **all three** tau cells now, where attempt 1 flipped
+sign in the middle cell. It also does not concentrate near expiry, which is
+what a stale book would look like. `paper_lock` reproduces it at +0.62 / +1.62
+/ +1.68 on the same windows — the same measurement, not a replication.
+
+### This is not a result yet
+
+t ≈ 1.8 on 64 windows. The effect is +3.4¢ per share after fee on a ~57¢ stake,
+about +5.9% a trade, which is large enough to be suspicious on its own. Getting
+to the Bonferroni threshold at this effect size needs roughly 138 windows —
+about 11.5 hours of 5-minute markets, and the collectors are still running.
+
+Note what it would mean if it holds: it is a **taking** edge, on the same
+markets section 42 declared closed. Both can be true — 42 says the book is
+calibrated *on average across all prices*, and this says it is not calibrated
+*conditional on being the dearer side near the money*. The average of a
+correctly-signed bias and its mirror is zero.
+
+### Forward test
+
+Two arms, `--fav-only 1` and `--fav-only -1`, buying the dearer and the cheaper
+side respectively at flat $3 stakes with hedging disabled, $100 each. They are
+complements of the same quotes, so **they cannot both be profitable** — their
+sum is exactly minus twice the fee. That makes the pair its own instrument
+check: if both show a profit, the harness is broken, and I would rather find
+that out from a rule that cannot be true than from a number I want to believe.
