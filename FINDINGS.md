@@ -1206,3 +1206,50 @@ staleness filter rather than a new experiment, and it should have come
 immediately after section 19. Every claim in sections 1–17 that rests on quote
 data needs the same treatment; the ones already redone are 14, 16, 17 (retracted
 in 18), the spot/favourite/model comparison (19), and now 15.
+
+---
+
+## 27. RETRACTION: the VRP conditioning was the stale feed wearing a different face
+
+Sections 9 and 10 made the variance risk premium the centrepiece — the trade
+pays when the book prices more uncertainty than the tape delivers, and the VRP
+tercile located where the favourite-longshot bias more than doubled. Re-run
+against outcomes directly, so no contaminated P&L enters:
+
+| VRP tercile | obs | markets | favourite wins | implied | excess | net/share |
+|---|---|---|---|---|---|---|
+| **all quotes** | | | | | | |
+| low (implied ≈ realised) | 1,037 | 128 | 76.3% | 73.1% | +3.2 pt | +1.81¢ |
+| middle | 1,038 | 130 | 76.5% | 75.6% | +0.9 pt | −0.35¢ |
+| **high (implied ≫ realised)** | 1,037 | 134 | 77.6% | 66.1% | **+11.5 pt** | **+10.04¢** |
+| **live quotes only** | | | | | | |
+| low | 936 | 125 | 75.7% | 72.7% | +3.1 pt | +1.69¢ |
+| middle | 937 | 127 | 77.2% | 76.1% | +1.1 pt | −0.17¢ |
+| **high** | 936 | 137 | 74.5% | 71.3% | **+3.2 pt** | **+1.77¢** |
+
+**On live quotes the gradient disappears completely** — the high tercile returns
+exactly what the low one does.
+
+The mechanism is mechanical and obvious in hindsight. Implied sigma is inverted
+from the **ask prices**. A frozen quote parked at 0.51/0.50 while spot has moved
+far away inverts to an enormous implied volatility, because the book looks
+maximally uncertain about an outcome that is not. **"High VRP" was largely a
+synonym for "stale quote"**, and the stale quotes carried the fake edge. The
++20.2 pt of section 10 is the same artifact seen from a third angle.
+
+### The first re-audit of this finding was a false positive
+
+Section 26's method — filter the signal by staleness, keep the arms' per-market
+P&L as the outcome — reported the VRP correlation surviving at r = −0.216, still
+significant. That was wrong, because the P&L came from `paper_lock` and
+`paper_dir`, which are **unguarded** and traded stale quotes themselves.
+**Filtering the signal is not enough; the outcome variable has to be clean too.**
+Using the market's own settlement instead of an arm's P&L removes the problem
+entirely, and the effect vanishes.
+
+### What is left standing
+
+The favourite still beats its own quote by **+3.1 pt** on live quotes, worth
+**+1.7¢ a share** after the real fee and the measured slippage, and it needs no
+VRP condition. That is the whole of the surviving edge, and at 125–137 markets
+it has not been tested for significance per market.
