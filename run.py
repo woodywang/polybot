@@ -90,14 +90,16 @@ class Book:
     is `price_changes`, not `changes`.  Get either wrong and the book silently
     freezes on its opening snapshot while every quote read goes stale.
     """
-    __slots__ = ("bids", "asks", "hint")
+    __slots__ = ("bids", "asks", "hint", "touched")
 
     def __init__(self):
         self.bids, self.asks, self.hint = {}, {}, None
+        self.touched = 0.0            # last time this book actually changed
 
     def snapshot(self, msg):
         self.bids = {float(x["price"]): float(x["size"]) for x in msg.get("bids", [])}
         self.asks = {float(x["price"]): float(x["size"]) for x in msg.get("asks", [])}
+        self.touched = time.time()
 
     def level(self, c):
         side = self.bids if c.get("side") == "BUY" else self.asks
@@ -108,6 +110,19 @@ class Book:
             side[px] = sz
         if c.get("best_ask") not in (None, ""):
             self.hint = float(c["best_ask"])
+        self.touched = time.time()
+
+    def stale_for(self, now=None):
+        """Seconds since this book last moved.
+
+        Quotes stop updating near expiry -- change rate falls from 29% per
+        snapshot at 60-120s to 4.9% under 30s, and several markets showed zero
+        changes across 180+ consecutive snapshots in their last minute. Those
+        frozen prices are not tradeable, but they look like enormous edge: a
+        book left at 0.51/0.50 while spot is 30bps away reads as a 45-cent
+        mispricing and produced a 100% win rate that was pure artifact.
+        """
+        return (now or time.time()) - self.touched if self.touched else 1e9
 
     def best_ask(self):
         live = [p for p, s in self.asks.items() if s > 0]
@@ -685,6 +700,10 @@ async def strategy(st):
                     ("Down", mk["dn"], 1 - p_up, a_dn, d_dn)):
                 if ask is None or depth <= 0 or (slug, side) in st.pending:
                     continue
+                # Refuse a quote that has not moved recently: it is a stale
+                # snapshot, not a price anyone will fill.
+                if st.books[tok].stale_for(now) > st.cfg.max_stale:
+                    continue
 
                 # --- confidence haircut: the random-walk null says the book is
                 # the consensus estimate and our p is one noisy model's opinion.
@@ -1097,6 +1116,8 @@ if __name__ == "__main__":
     p.add_argument("--bankroll", type=float, default=1000.0)
     p.add_argument("--kelly", type=float, default=0.25,
                    help="Kelly fraction for directional legs; 0 = flat max-usd")
+    p.add_argument("--max-stale", type=float, default=20.0,
+                   help="skip a book that has not changed in this many seconds")
     p.add_argument("--min-gap-bps", type=float, default=0.0,
                    help="minimum |spot - strike| in bps for the spot rule; "
                         "under 2bps the comparison is noise")

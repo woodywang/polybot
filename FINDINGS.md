@@ -757,3 +757,63 @@ loss will move that t a long way.
 
 Two arms now run the rule, one plain and one with `--min-gap-bps 5
 --max-price 0.95`, so the refinement earns its place or does not.
+
+---
+
+## 18. RETRACTION: the late-window edge was a frozen order book
+
+Sections 14, 16 and 17 are wrong. The quotes they were measured against stop
+updating near expiry.
+
+Rate at which a book changes between consecutive 250 ms snapshots:
+
+| time left | snapshots | changed |
+|---|---|---|
+| 180–300s | 46,623 | 24.5% |
+| 120–180s | 23,142 | 27.2% |
+| 60–120s | 22,563 | 29.1% |
+| 30–60s | 10,950 | 18.8% |
+| **2–30s** | 10,206 | **4.9%** |
+
+And for individual markets it is not merely slow, it is stopped: three examined
+markets logged **194, 217 and 182 consecutive snapshots in their final minute
+with zero quote changes.**
+
+The raw rows make the artifact obvious. Of 14 samples with a ≥10 bps gap and
+under 30 seconds left, twelve show `ask_Up ≈ 0.51 / ask_Dn ≈ 0.50` — a book
+parked at even money while spot sits 13–49 bps away. That is not a mispricing
+anyone would fill, it is a snapshot that stopped arriving. It also explains the
+one anomaly that never made sense: the book's implied probability *falling back*
+toward 0.50 near expiry (0.794 → 0.638 → 0.549). It was not falling, it had
+stopped.
+
+**Killed by this:** the last-minute concentration, `--min-tau-open 5`, the
+distance refinement, the 100% win rates, t = 5.51, t = 8.47, +33.55¢/share.
+
+### What survives, recomputed on live quotes only (tau ≥ 60s, 29.1% change rate)
+
+| rule | legs | markets | win | net/share | t |
+|---|---|---|---|---|---|
+| **spot rule** | 2,221 | 105 | 77.6% | **+7.12¢** | **3.03** |
+| buy the favourite | 2,221 | 105 | 74.0% | +4.47¢ | 1.67 |
+| TWAP model, edge > 0.01 | 1,247 | 102 | 70.8% | +4.33¢ | 1.40 |
+
+The core result holds: **a one-line spot comparison still beats the whole
+model.** Per asset, BTC +9.06¢ (t 2.36) and ETH +10.20¢ (t 2.53) work, SOL
++2.09¢ (t 0.48) does not — the same asset split as section 13.
+
+The distance refinement does not survive at all: 2–5 bps (t 1.90) is as good as
+10+ bps (t 1.56), and the monotonic ladder was entirely an artifact of frozen
+books at large gaps.
+
+### The fix is a guard, not a parameter
+
+`Book.stale_for()` now tracks when a book last moved and `--max-stale` (20s)
+refuses to trade one that has not. Setting `--min-tau-open 60` would have hidden
+this particular case; the guard catches the class, including a websocket that
+silently stops delivering for a token after a resubscribe.
+
+**How it was caught:** not by review but by pulling the raw rows behind an
+aggregate that was too good. A 45-cent mispricing persisting for 18 seconds is
+not something the mechanism can produce, and twelve rows reading 0.51/0.50 in a
+row is not what real quotes look like.
