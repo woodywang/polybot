@@ -4488,3 +4488,80 @@ Three separate things now point at the same unmeasurable region:
 None of that is evidence the account is a latency taker. It is evidence that if
 it is, **this setup was never going to see it**, and that is a more useful thing
 to know than another negative result.
+
+---
+
+## 82. The book reacts in 200 milliseconds, and that is the first number in the right range
+
+`latency.py` cross-correlated Binance mid returns against Polymarket mid returns
+on 100ms bars for 25 minutes of one 5-minute market:
+
+```
+   lag    corr(binance_t, poly_t+lag)
+    0ms         0.0218
+  100ms         0.0487
+  200ms         0.1897   <- peak
+  300ms         0.0779
+  400ms         0.0698
+  500ms         0.0345
+ >600ms         noise, |corr| < 0.03
+```
+
+**Polymarket's book follows Binance with a peak lag of 200ms**, essentially
+complete by 500ms. For those 200 milliseconds after a move, the quote is behind
+in a known direction.
+
+### What it is worth
+
+Section 81 established that a stale quote only trades if the fair price has moved
+at least one tick. Applying the measured lag to the measured travel distribution:
+
+```
+regime    10s travel   travel in 200ms   ticks
+median         2.00c            0.28c     0.28
+p75            5.00c            0.71c     0.71
+p90           12.50c            1.77c     1.77
+```
+
+At median and even p75 volatility, 200ms is not enough for a full tick — the
+mispricing cannot be expressed on the grid. **In the top decile it is 1.77
+cents, and there the trade exists.**
+
+### The correspondence, and how much to trust it
+
+```
+                        derived here      account (§1)
+gross edge / share            1.77c            1.64c
+fee at p = 0.79               1.16c            1.16c
+net before rebate            +0.61c           +0.48c
+```
+
+**The gross figure is independent of the account**: 1.77c comes from a 200ms lag
+measured today and a p90 travel figure measured on different data, neither of
+which used the account's trade history. It lands within 8% of the account's
+measured gross edge.
+
+The fee row is **not** independent and should not be read as confirmation —
+p = 0.79 was *derived from* the 1.16c fee in section 54, so that line is circular
+by construction.
+
+And there is a real degree of freedom in the comparison: **I chose the top
+decile**, because section 81 framed the tail as where a latency trader lives.
+Choosing p75 gives 0.71c, which does not match at all. The correspondence holds
+at p90 and nowhere else, and "pick the decile that matches" is exactly the error
+this project has made four times already.
+
+### Why it still matters
+
+Every other mechanism tested was wrong by one to two orders of magnitude: taking
+at -2.27c, making at -6.20c, momentum at 0.4 basis points against a 350 basis
+point fee. **This is the first one whose magnitude is even in the right range**,
+and it is the only one the harness was structurally unable to test — a 200ms
+window against a strategy loop that ticks every 250ms and a staleness guard set
+at 20 seconds.
+
+That is not a strategy. It is a measurement saying where the strategy would have
+to live: inside 200 milliseconds, in the top decile of volatility, at prices
+around 0.79 where the fee is cheap. **Nothing in this harness can go there**, and
+building something that could is a different project — one whose first
+requirement is co-located infrastructure rather than a better model.
