@@ -3441,3 +3441,33 @@ This is why the instrument matters more than the strategy: a 1c tick on a 1c
 spread leaves no passive price that is both fillable and profitable. It would
 take either a finer tick or a wider spread, and section 46 measured the hourly
 spread at exactly 2c two-sided — one tick each side.
+
+---
+
+## 64. The exposure cap binds, and it quantifies what was wrong before
+
+Section 59 added `--max-committed` after a 50% drawdown limit produced a 100.1%
+worst case. The control is now running on the complementary pair at 0.25, with
+the uncapped versions preserved for comparison:
+
+```
+                    max committed   mean committed
+paper_fav5  (0.25)      $15.04          $7.52      ceiling $25 -- binding
+paper_dog5  (0.25)      $15.65         $10.99      binding
+paper_fav5_nocap        $82.73         $52.15
+paper_dog5_nocap        $79.94         $48.09
+paper_hour  (no cap)    $76.82         $52.33
+```
+
+**The uncapped arms carried 77-83% of the account in open positions at their
+peak, and around half on average.** That is the number behind section 59's
+finding: with four-fifths of capital already spent, a drawdown limit has
+authority over the remaining fifth and nothing else.
+
+Nothing here says the capped arms will make money — they are running a rule
+section 51 showed to be noise. What it says is that the *account* now survives
+being wrong, which is a separate property from being right and the only one this
+project has been able to engineer deliberately.
+
+Two settlements each so far, so the cap's ceiling has not been tested against a
+busy stretch. Recorded as confirmed-binding, not as validated.
