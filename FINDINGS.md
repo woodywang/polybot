@@ -1139,3 +1139,34 @@ shares each is roughly **220 sell-shares per minute per token**, against a
 median of 20–45 shares resting ahead at the bid. A queue joiner should clear in
 5–12 seconds if the price holds. Version three posts at the prevailing bid and
 holds for a fixed 60 seconds, counting every sell at or below that price.
+
+---
+
+## 25. Guarded arms negative, unguarded arms positive — the cleanest demonstration yet
+
+| | markets | return | t |
+|---|---|---|---|
+| **guarded** `base` (no filter) | 16 | −9.88% | **−1.94** |
+| guarded `fav` | 15 | −1.61% | −0.21 |
+| guarded `vrp` | 13 | −10.78% | −1.27 |
+| guarded `filt` | 13 | −10.71% | −1.20 |
+| guarded `spot` (no model) | 31 | +9.03% | +0.77 |
+| **unguarded** `paper_lock` | historical | **+2.44%** | — |
+| **unguarded** `paper_dir` | historical | **+1.30%** | — |
+
+Same feed, same logic, one difference: whether the arm reads quotes that have
+stopped moving. **Every guarded model arm is negative and both unguarded arms
+are positive.** `paper_dir` was −1.92% a round ago and has since flipped
+positive as more stale-quote trades accumulated.
+
+`base` at **t = −1.94** is the closest anything in this project has come to
+significance, and it points the wrong way: it needs 16 markets for t = 2 and has
+15. The project's first significant result looks like it will be *trading this
+model on live quotes loses money*, which is a finding about what not to do
+rather than a strategy.
+
+`spot` remains the only positive guarded arm at +9.03%, but its per-market
+standard deviation of 63% puts the sample needed for t = 2 at **184 markets**
+against the 31 it has. Nothing is concluded.
+
+**Sample insufficient. No parameters changed, no new arm started.**
