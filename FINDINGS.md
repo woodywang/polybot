@@ -4493,6 +4493,10 @@ to know than another negative result.
 
 ## 82. The book reacts in 200 milliseconds, and that is the first number in the right range
 
+> **Under audit — see section 84.** Both feeds arrive in one event loop, so
+> part of that 200ms may be this process rather than the book. `clockcheck.py`
+> is measuring the difference from exchange timestamps.
+
 `latency.py` cross-correlated Binance mid returns against Polymarket mid returns
 on 100ms bars for 25 minutes of one 5-minute market:
 
@@ -4629,3 +4633,55 @@ Section 42's baseline is 168 markets, so the clean-feed re-test becomes possible
 in **roughly 5.8 hours** — around 05:00 UTC. **Every review before then will say
 "sample insufficient" about it, and that is calculable now rather than
 discoverable later.**
+
+---
+
+## 84. Auditing the 200ms before believing it
+
+Section 82 is the only result in this project whose magnitude matches the
+account it is trying to explain, which is exactly when to be most careful. Two
+audits.
+
+### How strong is the peak, really
+
+```
+peak                                    0.1897 at 200ms
+background (|lag - peak| > 300ms)       mean +0.0004, sd 0.0091, n=45
+peak above the profile's own noise      20.8 sd
+```
+
+That 20.8 is the robust number: it compares the peak against the *same
+profile's* noise floor, so serial correlation in the bars inflates both equally
+and cancels.
+
+On an absolute basis it is weaker. The 14,970 bars are **forward-filled**, so
+they are not independent observations — the effective n is the number of
+distinct Polymarket mid changes, a few hundred over 25 minutes. At n_eff = 300
+the standard error of a correlation is 0.058, making the peak about **3.3
+sigma**, not the 23 the raw bar count would claim.
+
+3.3 sigma on one asset over one 25-minute window is suggestive, not settled.
+Hence the ETH replication now running.
+
+### Is the lag the book's or mine?
+
+The more serious problem. Both feeds arrive in **one event loop**, and this
+project spent the day establishing that the Polymarket feed outruns its own
+consumer (§60: 867 frames/s, 309 slow-consumer disconnects). If Polymarket
+messages sit longer in my queue than Binance's do, the book appears to react
+slowly and the delay is mine.
+
+Both protocols carry an exchange timestamp — Binance `@trade` has `T`,
+Polymarket `price_change` has `timestamp` — so `arrival - exchange` is this
+process's own delay, measurable per feed and independently of any theory about
+the market. `clockcheck.py` is measuring it.
+
+**If Polymarket's messages are processed ~200ms later than Binance's, section 82
+measured the harness and the last hypothesis dies with the others.** If the
+differential is small, the 200ms is the book's and the finding stands.
+
+This is the same discipline that has paid for itself all day: sections 56, 60,
+62, 71 and 75 were all cases where the instrument, not the market, produced the
+number. **A result that finally fits is the worst possible moment to stop
+checking the instrument** — it is precisely when the temptation to believe is
+strongest and when every previous mistake was made.
