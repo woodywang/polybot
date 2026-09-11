@@ -3139,3 +3139,78 @@ strategy that starts filling 300× faster from a one-tick improvement is claimin
 the queue does not exist. **Every artifact this project has found announced
 itself the same way — as an unusually favourable number — and that remains the
 only reliable detector here.**
+
+---
+
+## 59. A 50% drawdown limit delivered a 100% worst case
+
+Reporting risk properly turned up two faults and one real result.
+
+### The equity table is per-process, and reading drawdown off it is wrong
+
+`paper_hour` showed **+$14.34** in the `equity` table against **-$17.71** from
+`--report`. Not a contradiction: `st.equity` resets to the starting bankroll on
+every restart and only records markets that settled while that process was
+alive. `paper_hour` was restarted mid-session for the UMA settlement fix, so its
+three rows cover three settlements out of six. `paper_dog5`, which never
+restarted, matches `--report` to the cent (-43.84 = -43.84).
+
+So drawdown is now rebuilt inside `report()` from the same settled markets as
+the P&L, and the `equity` table is a diagnostic only. **One number, one source.**
+
+### And the bankroll has to be stored with the data
+
+The rebuilt figures first read 2.9%, 7.0% and 3.9% — because `--report` was
+using argparse's default `--bankroll 1000` while every arm had run with 100.
+A drawdown measured against the wrong capital is wrong by exactly that ratio.
+`run.py` now writes a `meta` table at boot recording the bankroll and the full
+argv, so a database describes the configuration that produced it.
+
+Corrected:
+
+```
+arm            bankroll -> final    peak    trough   maxDD   worst mkt  mkts
+paper_fav5      $100.00 -> $74.47  $100.07  $70.63   29.4%   -$10.02     39
+paper_dog5      $100.00 -> $56.16  $120.13  $48.82   59.4%   -$10.03     21
+paper_hour      $100.00 -> $82.29  $100.00  $61.34   38.7%   -$13.03      6
+```
+
+### The circuit breaker fired correctly and did not save the account
+
+`paper_dog5` runs `--max-dd 0.5`, and the breaker worked exactly as written:
+
+```
+[HALT] drawdown 50.7% >= 50%; opening stopped, hedging continues
+```
+
+It still reached **59.4%**. Halting stops *opening*; it cannot stop capital
+already committed from settling against you. At the moment it fired, $39.23 was
+still at risk against $58.85 of equity.
+
+Tracking, at every point in the run, what the drawdown would have been had the
+open positions all settled to zero:
+
+```
+realised max drawdown            59.4%
+halt threshold                   50.0%
+worst case given open exposure  100.1%
+```
+
+**The 50% limit bought a strategy whose worst case was total ruin**, because at
+one point committed capital equalled the entire account. The limit was never
+wrong — it was measuring the wrong thing. A drawdown limit is a *reaction*; it
+has no authority over money already spent.
+
+### The control that was missing
+
+Bounding simultaneous exposure is what bounds the overshoot, and it is a
+separate control rather than a refinement of the drawdown limit. `run.py` gains
+`--max-committed`, a cap on open exposure as a fraction of equity, applied at
+every point capital is allocated (`free_capital()`). With the cap at 0.25, a
+breaker at 50% has a worst case near 62%, instead of 100%.
+
+This is the money-management lesson the project had not yet paid for: sizing
+rules limit the loss per position, drawdown limits react to losses already
+taken, and **neither one caps how much of the account is exposed at once.** That
+needed its own control, and its absence is why a limit set at 50% could have
+returned zero.

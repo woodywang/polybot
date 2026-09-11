@@ -24,7 +24,7 @@ polled purely to measure the basis we are carrying.
 
 No orders are sent.
 """
-import argparse, asyncio, json, sqlite3, statistics, time, urllib.request
+import argparse, asyncio, json, sqlite3, statistics, sys, time, urllib.request
 from collections import deque
 
 import websockets
@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS matched(
   ts REAL, slug TEXT, shares REAL, cost_open REAL, cost_lock REAL, pair REAL);
 CREATE TABLE IF NOT EXISTS equity(
   ts REAL, slug TEXT, pnl REAL, equity REAL, committed REAL);
+CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS basis(
   ts REAL, asset TEXT, venue REAL, chainlink REAL, bps REAL);
 """
@@ -156,6 +157,15 @@ class State:
         # `obs` has gained columns three times; older files predate each one.
         if "stale" not in {r[1] for r in self.db.execute("PRAGMA table_info(obs)")}:
             self.db.execute("ALTER TABLE obs ADD COLUMN stale REAL")
+        # A report has to know the bankroll the arm actually ran with, or a
+        # drawdown computed against argparse's default is wrong by whatever
+        # factor separates them -- it read 2.9% instead of 29% here.  Store the
+        # configuration with the data it produced.
+        self.db.execute("INSERT OR REPLACE INTO meta VALUES('bankroll',?)",
+                        (str(a.bankroll),))
+        self.db.execute("INSERT OR REPLACE INTO meta VALUES('argv',?)",
+                        (" ".join(sys.argv[1:]),))
+        self.db.commit()
         self.wanted, self.gen = set(), 0
         self.pos = {}                 # (slug, side) -> [shares, cost_incl_fee]
         self.lots = {}                # (slug, side) -> deque([shares, cost/share])
@@ -671,7 +681,7 @@ async def fill(st, kind, slug, side, tok, snap, cap):
             if ed <= min(0.0, st.cfg.min_edge) or ask > st.cfg.max_price:
                 return
             room = st.cfg.max_per_market - st.held(slug, side)[1]
-            room = min(room, st.equity - st.committed)      # cannot spend what is committed
+            room = min(room, free_capital(st))    # cannot spend what is committed
             stake = min(st.cfg.max_usd,
                         kelly_usd(snap["fair"], ask, st.cfg.bankroll,
                                   st.cfg.kelly) if st.cfg.kelly > 0
@@ -682,7 +692,7 @@ async def fill(st, kind, slug, side, tok, snap, cap):
             if ed < st.cfg.min_lock:
                 return                           # the move went away
             sz = min(st.cfg.max_usd / ask, depth, cap_shares(st, slug, side),
-                     max(st.equity - st.committed, 0.0) / ask)
+                     free_capital(st) / ask)
             if sz > 0:          # re-price against the exact lots we will consume
                 _, c = st.take_lots_peek(slug,
                                          "Down" if side == "Up" else "Up", sz)
@@ -752,12 +762,28 @@ def maker_step(st, slug, side, tok, snap, now, mid):
         return
     st.rest.pop(tok, None)
     room = min(st.cfg.max_per_market - st.held(slug, side)[1],
-               st.equity - st.committed)
+               free_capital(st))
     if room <= 0:
         return
     sz = min(st.cfg.max_usd, room) / bid
     if sz > 0:
         log(st, "open", slug, snap, side, bid, qsz, mid - bid, sz, fee=0.0)
+
+
+def free_capital(st):
+    """Spendable dollars, honouring the simultaneous-exposure cap.
+
+    A drawdown limit only stops OPENING.  It cannot stop capital already
+    committed from settling against you, so the realised drawdown overshoots the
+    limit by whatever was at risk when it fired.  paper_dog5 halted correctly at
+    50.7% and still reached 59.4%, and had its $39.23 of open exposure settled
+    to zero it would have reached 84% -- from a limit set at 50%.
+
+    Bounding simultaneous exposure is what bounds that overshoot, so it is a
+    separate control from the drawdown limit rather than a refinement of it.
+    """
+    cap = st.equity * st.cfg.max_committed if st.cfg.max_committed > 0 else st.equity
+    return max(min(st.equity, cap) - st.committed, 0.0)
 
 
 def kelly_usd(p, ask, bankroll, frac):
@@ -1004,7 +1030,7 @@ async def strategy(st):
                 #   intensity 0.376 (inverted) -- a busy tape means makers
                 #                 widen and the stale-quote edge is gone
                 room = st.cfg.max_per_market - st.held(slug, side)[1]
-                budget = st.equity - st.committed
+                budget = free_capital(st)
                 if (fresh and ed > st.cfg.min_edge and ask <= st.cfg.max_price
                         and ask >= st.cfg.min_ask
                         and depth <= st.cfg.max_depth
@@ -1503,6 +1529,45 @@ def report(a):
 
     _identity()
 
+    # --- risk: the equity path, rebuilt from the same rows as the P&L above.
+    # The `equity` table is per-PROCESS -- it resets to the starting bankroll on
+    # every restart and only records markets that settled while that process was
+    # alive.  paper_hour showed +$14.34 there against -$17.71 here purely because
+    # it was restarted mid-session.  Reading drawdown off that table is how a
+    # restarted arm reports a drawdown it never had, so it is rebuilt here from
+    # the settled markets in time order instead.
+    mp = {}
+    for slug, kind, side, *_ , px, sz, fee in rows:
+        if kind == "sample" or not sz:
+            continue
+        mp[slug] = mp.get(slug, 0.0) - (px * sz + fee) \
+            + (sz if res[slug] == side else 0.0)
+    if mp:
+        bank = dict(db.execute("SELECT key,value FROM meta")).get("bankroll") \
+            if "meta" in {r[0] for r in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")} else None
+        if bank is None:
+            print(f"\n  [warn] no bankroll recorded in this database; "
+                  f"using --bankroll {a.bankroll:g}")
+        eq = peak = float(bank if bank is not None else a.bankroll)
+        dd = 0.0
+        low = eq
+        worst = min(mp.values())
+        for slug in sorted(mp, key=lambda s: starts.get(s, 0)):
+            eq += mp[slug]
+            peak = max(peak, eq)
+            dd = max(dd, (peak - eq) / peak if peak > 0 else 0.0)
+            low = min(low, eq)
+        start = float(bank if bank is not None else a.bankroll)
+        print(f"\nrisk (rebuilt from settled markets, not the equity table)")
+        print(f"  bankroll ${start:,.2f} -> ${eq:,.2f}"
+              f"   peak ${peak:,.2f}   trough ${low:,.2f}")
+        print(f"  max drawdown {dd*100:.1f}%   worst single market ${worst:+,.2f}"
+              f"   markets {len(mp)}")
+        if low <= 0:
+            print(f"  *** RUINED -- equity reached ${low:,.2f}. "
+                  f"Everything after that point is fiction. ***")
+
     # --- was simultaneous arbitrage ever available?
     r = db.execute("SELECT COUNT(*), MIN(cost), AVG(cost),"
                    " SUM(cost<1.0) FROM pairs").fetchone()
@@ -1665,6 +1730,11 @@ if __name__ == "__main__":
     p.add_argument("--log-stale", type=int, default=0,
                    help="record stale quotes as samples instead of skipping "
                         "them.  Trading still respects --max-stale.")
+    p.add_argument("--max-committed", type=float, default=0.0,
+                   help="cap simultaneous open exposure at this fraction of "
+                        "equity.  A drawdown limit stops opening but cannot "
+                        "stop committed capital from settling against you; "
+                        "this is what bounds the overshoot.  0 = uncapped.")
     p.add_argument("--maker-improve", type=int, default=0,
                    help="post this many ticks above the best bid, buying queue "
                         "priority at the cost of the spread it was earning.")
