@@ -140,6 +140,8 @@ class State:
         self.equity = a.bankroll
         self.committed = 0.0
         self.mkt_cost = {}                         # slug -> capital tied up
+        self.peak = a.bankroll
+        self.halted = False
         self._schema_check()       # last: it exercises every field above
 
     def _schema_check(self):
@@ -483,6 +485,22 @@ async def resolve(st):
                         payout = st.held(sl, won)[0]        # $1 per winning share
                         st.committed = max(st.committed - cost, 0.0)
                         st.equity += payout - cost
+                        st.peak = max(st.peak, st.equity)
+                        # Circuit breaker. Bootstrapping the 87 settled markets
+                        # showed the realised drawdown sitting at the 1.4th
+                        # percentile of random reorderings of the same returns:
+                        # losses cluster, so an iid envelope is too loose and a
+                        # hard equity floor is the honest guard. Sizing cannot
+                        # lean on the edge either -- mean 4.26% per market with
+                        # a 2.79% standard error is t = 1.53, so its 95% lower
+                        # bound is negative and any Kelly fraction computed off
+                        # it is betting estimation error.
+                        dd = (st.peak - st.equity) / max(st.peak, 1e-9)
+                        if not st.halted and dd >= st.cfg.max_dd > 0:
+                            st.halted = True
+                            print(f"[HALT] drawdown {dd*100:.1f}% >= "
+                                  f"{st.cfg.max_dd*100:.0f}%; opening stopped, "
+                                  f"hedging continues", flush=True)
                         st.db.execute("INSERT INTO equity VALUES(?,?,?,?,?)",
                                       (time.time(), sl, payout - cost,
                                        st.equity, st.committed))
@@ -745,6 +763,7 @@ async def strategy(st):
                         and vrp_ok
                         and r_not <= st.cfg.max_intensity
                         and budget > st.cfg.min_usd
+                        and not st.halted
                         and room > 0 and tau > st.cfg.min_tau_open
                         and r_not >= st.cfg.min_intensity
                         and st.cfg.er_min <= (mk.get("er1") or 0.5)
@@ -771,7 +790,8 @@ async def heartbeat(st):
               f"open={q('SELECT COUNT(*) FROM obs WHERE kind=\"open\"')} "
               f"lock={q('SELECT COUNT(*) FROM obs WHERE kind=\"lock\"')} "
               f"res={q('SELECT COUNT(*) FROM markets WHERE outcome IS NOT NULL')} "
-              f"eq=${st.equity:,.2f} used=${st.committed:,.2f}",
+              f"eq=${st.equity:,.2f} used=${st.committed:,.2f}"
+              f"{' HALTED' if st.halted else ''}",
               flush=True)
 
 
@@ -1050,6 +1070,9 @@ if __name__ == "__main__":
     p.add_argument("--bankroll", type=float, default=1000.0)
     p.add_argument("--kelly", type=float, default=0.25,
                    help="Kelly fraction for directional legs; 0 = flat max-usd")
+    p.add_argument("--max-dd", type=float, default=0.25,
+                   help="stop opening new legs once equity is this far below "
+                        "its peak; hedging existing inventory continues")
     p.add_argument("--min-vrp", type=float, default=0.0,
                    help="require implied/realised sigma above this before "
                         "opening; the trade pays when the book prices more "

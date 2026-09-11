@@ -419,3 +419,47 @@ favourites **and** rich implied vol together, which is now running.
 When the book and the model disagree about which side is favoured, spot's
 direction was right 58.3% (n=12) and 56.2% (n=16). At those sizes a coin lands
 that far off routinely. Nothing is built on it.
+
+---
+
+## 11. Risk: the edge is not yet significant, and losses cluster
+
+Per-market returns from the 87 settled markets in `paper_lock`:
+
+```
+mean +4.26%   stdev 26.01%   Sharpe per market +0.164
+standard error 26.01/sqrt(87) = 2.79%   ->   t = 1.53
+95% lower bound on the mean: -1.21%
+```
+
+**A negative edge cannot be ruled out.** Kelly off this mean would ask for
+`mu/sigma^2` = 71% of bankroll per market, and even a quarter of that is 18% —
+all of it betting estimation error. Reaching t = 2 at the observed effect size
+needs about **150 settled markets**; there are 87. Until then position size is a
+fixed small fraction, not a function of the estimated edge.
+
+### Drawdowns are worse than the iid null
+
+Bootstrapping 20,000 random reorderings of the same per-market returns:
+
+| | `paper_lock` | `paper_dir` |
+|---|---|---|
+| realised max drawdown | −224.5% | −745.0% |
+| shuffled p50 / p95 / p99 | −120.9 / −195.7 / −232.2% | −549.4 / −780.1 / −884.4% |
+| percentile of the realised value | **1.4%** | 7.9% |
+
+`paper_lock`'s drawdown is worse than 98.6% of reorderings of its own returns,
+so **losses are serially correlated — bad stretches arrive in runs.** A limit
+calibrated on an iid envelope is therefore too loose, which is why the live
+breaker is a plain equity floor (`--max-dd`, default 25% off peak, stops opening
+while hedging continues) rather than a sigma-root-n band.
+
+(Drawdowns here are in summed per-market return points, so they scale with the
+fraction risked per market rather than being an equity figure directly.)
+
+### An environment bug that cost two launches
+
+Two arms failed to start with every flag reported unrecognised, twice, and the
+code was never at fault: **the session shell is zsh, which does not word-split
+unquoted parameter expansions.** A variable holding the flag list arrived as one
+argument. Args are written literally now.
