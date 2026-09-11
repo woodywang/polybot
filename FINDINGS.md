@@ -1302,3 +1302,66 @@ having moved while you waited.
 Making does not work here for the same reason taking does not: not because the
 economics are wrong, but because the market is too thin to transact on at all.
 Every direction this project has explored now terminates in the same place.
+
+---
+
+## 29. The last surviving edge does not survive either
+
+The one claim left standing — the favourite beats its own quote — tested the way
+every claim should have been from the start: live quotes only, market settlement
+as the outcome, aggregated per market.
+
+| | legs | markets | win | excess | net/share | t | markets for t=2 |
+|---|---|---|---|---|---|---|---|
+| **all** | 3,000 | 153 | 74.2% | +1.6 pt | +1.94¢ | **0.95** | 674 |
+| BTC | 1,054 | 51 | 77.0% | +4.3 pt | +4.97¢ | 1.61 | 78 |
+| ETH | 1,027 | 51 | 75.4% | +3.3 pt | +5.25¢ | 1.49 | 92 |
+| SOL | 919 | 51 | 69.6% | −3.4 pt | −4.41¢ | −1.16 | 152 |
+| tau 180–300s | 1,528 | 153 | 69.6% | +3.8 pt | +3.38¢ | 1.40 | 311 |
+| tau 120–180s | 674 | 130 | 75.5% | −1.2 pt | −2.54¢ | −0.87 | 689 |
+| tau 60–120s | 586 | 126 | 79.0% | −1.5 pt | −3.54¢ | −1.31 | 293 |
+| **tau 5–60s** | 212 | 81 | 89.6% | +3.6 pt | +3.48¢ | **2.06** | 76 |
+| **price 0.50–0.65** | 1,106 | 145 | 61.0% | +3.8 pt | +5.99¢ | **2.37** | 103 |
+| price 0.65–0.80 | 887 | 126 | 72.0% | +0.3 pt | +0.96¢ | 0.32 | 5,018 |
+| price 0.80–0.95 | 674 | 126 | 86.9% | +0.5 pt | −4.63¢ | −1.63 | 191 |
+| price 0.95–1.00 | 333 | 107 | 97.9% | +0.4 pt | −0.17¢ | −0.12 | 28,718 |
+
+Overall: **t = 0.95, not significant**, and 674 markets would be needed.
+
+Two subgroups clear t = 2. **Twelve tests were run.** Bonferroni puts the
+threshold at α = 0.05/12 = 0.0042, which is **|t| > 2.86**. The largest observed
+is 2.37. **Nothing survives the correction**, and finding two nominal hits in
+twelve tests is what noise produces.
+
+Reporting only those two would be data mining, and it is exactly the shape of
+the error that produced every retracted section in this file: a subgroup with a
+striking number, published before asking how many subgroups were looked at.
+
+---
+
+## The bottom line
+
+Every route has now been measured and closed:
+
+| route | outcome |
+|---|---|
+| simultaneous two-sided arbitrage | 17,049 quotes, none under $1.00 |
+| sequential pair lock | not arbitrage — one branch of a directional bet |
+| TWAP model timing | gross alpha **negative** on live quotes (−2.5% to −3.0%) |
+| spot-vs-strike rule | +9.03% on 31 markets, t = 0.77, needs 184 |
+| variance risk premium | retracted — stale quotes inverted to high implied vol |
+| favourite-longshot bias | +1.6 pt, t = 0.95; no subgroup survives correction |
+| market making | queue takes 6.6 minutes, the market lives 5 |
+
+**No tradeable edge was demonstrated at retail latency in Polymarket's
+five-minute crypto markets.** The honest output of this project is a negative
+result plus the instrumentation that produced it — a staleness guard, a
+cross-source book audit, a trade-based queue model, and the accounting that
+reconciles to settlement.
+
+The most expensive lesson is methodological. Six separate findings looked
+strong, replicated, and had plausible mechanisms; all six were the same
+artifact, a websocket that stops delivering. What caught it was not code review
+but the discipline of pulling raw rows behind any number too good for the
+mechanism to produce — and once a second data source was added, twelve minutes
+settled what four sections of analysis had not.
