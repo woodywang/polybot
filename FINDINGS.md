@@ -556,3 +556,56 @@ belongs at 0.50.
 | `paper100_filt` | ask ≥ 0.50 | implied/realised ≥ 1.5 |
 
 Each factor alone and both together, against a control, on one feed.
+
+---
+
+## 14. The model does beat the book — and most of the edge is in the last minute
+
+The basic question, never asked until now: is the TWAP model better than simply
+reading the quote? Log-loss against realised outcomes, 2,138 observations over
+93 markets:
+
+| time left | obs | TWAP model | naive digital | the book | coin flip |
+|---|---|---|---|---|---|
+| 240–300s | 540 | **0.6112** | 0.6116 | 0.6464 | 0.6931 |
+| 180–240s | 513 | **0.4601** | 0.4669 | 0.5470 | 0.6931 |
+| 120–180s | 480 | 0.4317 | **0.4286** | 0.5027 | 0.6931 |
+| 60–120s | 420 | **0.3544** | 0.3645 | 0.4124 | 0.6931 |
+| 5–60s | 185 | **0.1512** | 0.2278 | 0.3833 | 0.6931 |
+| all | 2,138 | **0.4444** | 0.4541 | 0.5215 | 0.6931 |
+
+Blending confirms it: 100% model is the best mix, and every weight on the book
+makes the forecast worse. The model is not adding a little on top of the quote —
+it strictly dominates it.
+
+**The advantage concentrates in the final minute**, 0.1512 against the book's
+0.3833, and that is exactly where the naive digital falls away too (0.2278).
+The last minute is where the TWAP structure does its work: variance collapsing
+as `tau^3` and most of the settlement average already printed.
+
+This inverts the reading of section 10. The favourite-longshot bias is the
+*symptom*; the cause is that **the book is slow to price the certainty a TWAP
+settlement already implies near expiry.**
+
+### A parameter of mine was blocking the best window
+
+`--min-tau-open 45` was set early to leave time for a hedge to appear. Sorting
+the legs the model would have opened:
+
+| time left | legs | avg price | win rate | net/share | on stake |
+|---|---|---|---|---|---|
+| 45–60s | 48 | 0.550 | 70.8% | +13.97¢ | +25.4% |
+| 20–45s | 42 | 0.478 | 78.6% | +28.93¢ | **+60.6%** |
+| 2–20s | 28 | 0.552 | 96.4% | +39.35¢ | **+71.3%** |
+| **blocked (< 45s)** | **70** | 0.507 | **85.7%** | **+33.09¢** | **+65.2%** |
+| allowed (≥ 45s) | 1,141 | 0.587 | 69.1% | +8.58¢ | +14.6% |
+
+Checked for the correlated-sample trap that has caught this project twice: the
+70 legs come from **23 distinct markets**, 18 of which are net positive, and
+aggregating per market gives +25.19¢/share with a 5.51¢ standard error —
+**t = 4.57**, against t = 1.53 for the strategy overall. Depth is not the
+obstacle either: median 80 shares at the best ask, about $54 tradeable against
+a $3 order.
+
+At 20 seconds with the model 78–96% confident, the hedge the parameter was
+protecting is not needed. A fifth arm runs `--min-tau-open 5`.
