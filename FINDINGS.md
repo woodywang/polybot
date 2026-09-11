@@ -1648,3 +1648,53 @@ headroom but the figure would shrink. Cross-checking `prices-history` against
 the live book now recording in `paper_hour.db` is the same
 two-independent-sources technique that settled the frozen-book question, and it
 is the next thing to do.
+
+---
+
+## 35. The circuit breaker fired, on exactly the two arms it should have
+
+First live trigger of the drawdown limit from section 24:
+
+```
+base  [HALT] drawdown 31.0% >= 25%; opening stopped, hedging continues
+vrp   [HALT] drawdown 27.6% >= 25%; opening stopped, hedging continues
+```
+
+| arm | peak | now | drawdown | per-market t |
+|---|---|---|---|---|
+| `base` | $100.00 | $68.00 | 32.0% | **−1.99** (halted) |
+| `vrp` | $104.93 | $83.68 | 20.2% | **−1.27** (halted) |
+| `fav` | $110.33 | $107.32 | 2.7% | +0.94 |
+| `filt` | $106.43 | $99.15 | 6.8% | −0.52 |
+| `spot` | $142.26 | $142.26 | 0.0% | +1.42 |
+
+**The two arms it stopped are the two with the most negative t statistics**, and
+the design held: opening stopped while hedging continued, so no naked inventory
+was stranded by the halt. That was the specific reason the breaker was written
+as an equity floor on *opening* rather than a full stop.
+
+A diagnostic note: the VRP arm's inactivity was first read as "the filter finds
+nothing now that stale quotes are excluded", which would have been a neat
+confirmation of section 27. It was wrong — 29.8% of its samples still meet
+implied/realised ≥ 1.5. The arm had simply halted. **The tidy explanation was
+available before the log was checked, which is how the six retracted findings
+started.**
+
+### Arm status
+
+| arm | markets | return | t |
+|---|---|---|---|
+| base | 42 | −5.18% | −1.99 |
+| fav | 36 | +3.85% | +0.94 |
+| vrp | 36 | −10.78% | −1.27 |
+| filt | 36 | −0.27% | −0.52 |
+| spot | 54 | +10.55% | +1.42 |
+| hour | 0 | — | hourly markets need an hour; 29 legs open |
+
+Nothing significant. `spot` has moved from t = 0.77 to t = 1.42 over 50 markets,
+the same direction but nowhere near the 184 it needs.
+
+**Sample insufficient on every live arm — no parameters changed.** The evidence
+that matters this round is historical, not live: 432 resolved hourly markets at
+t = 8.49, and it points at the hourly instrument rather than at any of these
+five.
