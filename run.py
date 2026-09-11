@@ -740,6 +740,16 @@ async def strategy(st):
                 # --- open: directional, and only with enough of the window
                 # left for the price to move far enough to lock it.
                 ed = fair.edge(p, ask)
+                # The whole model measured against one comparison. Buying the
+                # side spot sits on beats the TWAP model's own edge filter on
+                # every count: +12.95c/share (t 5.51) against +12.02c (t 2.33)
+                # in the last minute, and it trades twice as often. Direction
+                # is where the model is right -- it agrees with spot in 2,180
+                # of 2,181 samples -- and confidence is where it is wrong, so
+                # filtering on edge discards the good trades along with the
+                # bad. Kept as a mode so the two run head to head.
+                if st.cfg.spot_rule:
+                    ed = 0.02 if side == ("Up" if spot > k else "Down") else -1.0
                 # Variance risk premium gate. Measured on 156 settled markets
                 # and replicated independently in both arms (r -0.28 / -0.38,
                 # both past their own 95% band): the trade pays when the book
@@ -1076,6 +1086,9 @@ if __name__ == "__main__":
     p.add_argument("--bankroll", type=float, default=1000.0)
     p.add_argument("--kelly", type=float, default=0.25,
                    help="Kelly fraction for directional legs; 0 = flat max-usd")
+    p.add_argument("--spot-rule", type=int, default=0,
+                   help="ignore the model's fair value and buy whichever side "
+                        "spot sits on relative to the strike")
     p.add_argument("--slippage", type=float, default=0.0013,
                    help="adverse selection charged on every simulated fill, in "
                         "dollars per share; measured, not assumed")

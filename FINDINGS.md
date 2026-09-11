@@ -609,3 +609,55 @@ a $3 order.
 
 At 20 seconds with the model 78–96% confident, the hedge the parameter was
 protecting is not needed. A fifth arm runs `--min-tau-open 5`.
+
+---
+
+## 15. The whole model loses to one comparison
+
+Every rule scored the same way — pick a side, pay the ask, charge the real fee
+and the measured slippage, aggregate per market so correlated legs cannot
+inflate the t:
+
+| rule | legs | markets | net/share | t |
+|---|---|---|---|---|
+| **spot above strike → buy Up, last 60s** | 210 | 65 | **+12.95¢** | **5.51** |
+| TWAP model, edge > 0.01, last 60s | 126 | 36 | +12.02¢ | 2.33 |
+| buy the favourite, last 60s | 210 | 65 | +5.06¢ | 1.69 |
+| **spot above strike → buy Up, whole window** | 2,300 | 99 | **+7.17¢** | **3.14** |
+| TWAP model, edge > 0.01, whole window | 1,292 | 96 | +3.39¢ | 1.11 |
+
+The TWAP digital, the implied-vol inversion, the adaptive hedge band, Kelly,
+the shrinkage — none of it beats *is spot above the strike*. The model's
+direction agrees with spot in 2,180 of 2,181 samples, so all its filter does is
+discard half the trades, and **the half it discards is the better half.**
+Direction is what the model gets right; confidence is what it gets wrong.
+
+### Why the spot rule also beats buying the favourite
+
+They are the same trade 90.4% of the time. The difference is the other 9.6%:
+
+| | legs | markets | win rate | net/share | t |
+|---|---|---|---|---|---|
+| book agrees with spot → buy it | 2,079 | 98 | 80.1% | +5.54¢ | 2.12 |
+| they disagree → buy spot's side | 221 | 40 | 67.0% | +3.11¢ | 0.42 |
+| they disagree → buy the book's side | 221 | 40 | **33.0%** | **−14.53¢** | −2.00 |
+
+When the book disagrees with spot it is not merely uninformative, it is
+**wrong** — 33% win rate and −14.53¢ a share. In the last minute the arms
+disagree 16.7% of the time, which is why the spot rule (+12.95¢) pulls so far
+ahead of the favourite rule (+5.06¢) there.
+
+Following spot into the disagreement is not itself significant (t = 0.42). The
+value is in *not following the book*, and the profitable core is the ordinary
+agreement case in the last minute: 94.9% win rate, +10.92¢, t = 4.86.
+
+### Two labelling errors caught before they became conclusions
+
+`book_up = au < ad` had the sign backwards — a cheaper Up means the market
+thinks Up is *less* likely — which swapped "agree" and "disagree" and would have
+published the opposite mechanism. Earlier in the same pass, comparing a fill
+price against the better of the two sides' quotes mixed the side bought with
+the side that was not, producing a +11.55¢ slippage figure that was discarded.
+Both were caught by numbers that did not look plausible (a 91.4% disagreement
+rate; an 11¢ slippage), which is the only reason to keep checking magnitudes
+against what the mechanism could physically produce.
