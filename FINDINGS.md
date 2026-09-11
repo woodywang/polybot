@@ -3735,3 +3735,68 @@ loss should be the conditioning alone.
 That is a falsifiable prediction with a sign and a rough size, made before the
 arm has a single settlement, which is the most useful thing this project can do
 with a hypothesis it expects to fail.
+
+---
+
+## 69. There are no stale quotes in tradeable markets. The last hypothesis is closed.
+
+Section 62 reopened the stale-quote question: with the feed fixed, frozen books
+became REST-confirmed rather than artifacts, and stale quotes were the only
+surviving explanation for the section 1 account's 1.64c a share. `stale5` has
+been recording quote age on the clean feed since.
+
+**304 samples in actively trading 5-minute markets:**
+
+```
+  < 1s     296
+  1-5s       8
+  5-20s      0
+  > 20s      0
+  max      1.8s
+```
+
+Before the fix the same arm reported an average staleness of 3.2s and a maximum
+of 18.7s. On a feed that is actually being drained, **the maximum quote age
+across 304 observations is 1.8 seconds.** There is nothing to pick off.
+
+### Reconciling this with section 62
+
+`stalecheck.py` found 16 books untouched for 20+ seconds on the same clean feed,
+six of them in a window that was nominally open. Both are true, and the
+difference is which markets each instrument looks at:
+
+- `stale5` samples only markets with `0 < tau < window` — **currently trading**.
+- `stalecheck` subscribes across a wider slug range, including windows that have
+  not opened yet and ones that have expired.
+
+Nobody quotes a market that starts in ten minutes, so its book sits still. That
+is a frozen book, it is REST-confirmed, and it is **not a price anyone can
+trade**. The distinction the earlier sections kept missing is not
+frozen-versus-live, it is *tradeable*-versus-not.
+
+### What this closes
+
+| explanation for the account's +1.64c gross | status |
+|---|---|
+| model edge over the book | no (§41) |
+| the book being mispriced | no (§42, §45, §65) |
+| partly a maker | no — -15c markout (§57) |
+| liquidity rewards | none on these markets (§53) |
+| picking off stale quotes | **no — quotes are never stale (this section)** |
+
+**Every explanation this harness can test is now tested and negative.** The
+account's 2.5c-a-share advantage over the displayed quote remains unexplained,
+and the honest statement is that it is unexplained *by anything measurable from
+outside* — not that it is impossible. What is left is latency at a scale this
+setup cannot observe (its edge existing in the milliseconds between a Binance
+print and a Polymarket quote update), or a difference in what it trades that the
+public trade history did not reveal.
+
+### The measurement that mattered most
+
+This answer was only available after fixing one keyword argument. For the entire
+life of the project before that, the instrument reported staleness that was
+almost entirely its own — and that false signal is what made six earlier
+findings look real, motivated the `--max-stale` guard, and kept a dead
+hypothesis alive for fifty sections. **The single most valuable thing done today
+was measuring the instrument instead of the market.**

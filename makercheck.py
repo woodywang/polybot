@@ -20,6 +20,13 @@ WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 UA = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 ASSETS = {"btc": "bitcoin", "eth": "ethereum", "sol": "solana"}
 MARKOUTS = (30.0, 120.0)
+# Section 68: the spread is quoted at about twice the 30s mid travel, so a
+# one-tick improvement only pays where the spread is 3c or wider.  IMPROVE posts
+# a tick above the touch and MINCAP refuses to post at all unless (mid - price)
+# still clears this, which is the configuration section 67 opened up.  With
+# IMPROVE=0 and MINCAP=-1 this is the original at-the-touch measurement.
+IMPROVE = int(__import__("os").environ.get("MK_IMPROVE", "0"))
+MINCAP = float(__import__("os").environ.get("MK_MINCAP", "-1"))
 MAXWAIT = 600.0                      # give a post ten minutes to fill
 
 
@@ -69,7 +76,14 @@ async def main(minutes=60):
                     continue
                 if any(o["tok"] == t and o["state"] == "queued" for o in live):
                     continue
-                live.append(dict(tok=t, price=p, ahead=sz, sold=0.0,
+                m = mid(t)
+                px, ahead = p, sz
+                if IMPROVE:
+                    px, ahead = round(p + 0.01 * IMPROVE, 4), 0.0
+                if m is None or m - px < MINCAP:
+                    continue
+                live.append(dict(tok=t, price=px, ahead=ahead, sold=0.0,
+                                 capture=m - px, spread=None,
                                  born=now, state="queued", fill_ts=None,
                                  fill_mid=None, marks={}))
             for o in list(live):
@@ -125,7 +139,7 @@ async def main(minutes=60):
                                     if (o["state"] == "queued" and o["tok"] == t
                                             and px <= o["price"] + 1e-9):
                                         o["sold"] += float(m["size"])
-                                        if o["sold"] >= o["ahead"]:
+                                        if o["sold"] > 0 and o["sold"] >= o["ahead"]:
                                             o["state"] = "filled"
                                             o["fill_ts"] = time.time()
                                             o["fill_mid"] = mid(t)
@@ -139,7 +153,12 @@ async def main(minutes=60):
           f"({len(fills)/max(len(done),1)*100:.1f}%) ===")
     if not done:
         return
+    print(f"  improve {IMPROVE} tick(s), min capture {MINCAP:+.3f}")
     print(f"  size ahead at post  median {statistics.median([o['ahead'] for o in done]):.0f} sh")
+    cap = [o.get("capture") for o in done if o.get("capture") is not None]
+    if cap:
+        print(f"  capture at post     median {statistics.median(cap)*100:+.2f}c"
+              f"   mean {statistics.mean(cap)*100:+.2f}c")
     for h in MARKOUTS:
         v = [o["marks"][h] for o in fills if o["marks"].get(h) is not None]
         if len(v) < 5:
