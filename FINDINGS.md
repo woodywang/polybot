@@ -937,3 +937,60 @@ the spot comparison, or buying the favourite — shows a significant edge
 (section 19). The apparent edge was the feed, and the feed is now guarded
 against by `--max-stale`. There is no evidence here of a tradeable strategy in
 Polymarket's 5-minute crypto markets at retail latency.
+
+---
+
+## 21. The maker side is where the fee structure points
+
+With no edge left on the taking side, the structure of the fees is worth
+reading again. The spread is measurable from data already logged: Up and Down
+are complementary, so `bid_up = 1 - ask_dn` and the Up spread is
+`ask_up + ask_dn - 1`.
+
+Over 215,473 snapshots it is **exactly one cent at every horizon** — p25, median
+and p75 all 1.00¢ from 300s down to 60s. The book sits on the minimum tick
+almost always.
+
+Per share at the money:
+
+| | maker | taker |
+|---|---|---|
+| half spread | **+0.50¢** | −0.50¢ |
+| fee | 0 | **−1.75¢** |
+| rebate (20% of taker fee, the conservative end) | +0.35¢ | — |
+| **total** | **+0.85¢** | **−2.25¢** |
+
+A **3.10¢ per share** swing between the two sides of the same trade — nearly
+twice the 1.64¢ gross edge the real taker account was measured at in section 1.
+It also closes that loop: that account paid 71% of its gross edge in fees, and a
+maker doing identical volume keeps it.
+
+### Adverse selection is real and appears to be covered
+
+Mid-price changes are **positively autocorrelated, r = +0.0911** over 59,284
+consecutive moves. Prices trend rather than revert, which is the bad direction
+for a resting order:
+
+| previous move | n | next move |
+|---|---|---|
+| up ≥ 1¢ | 23,122 | **+0.311¢** |
+| up < 1¢ | 6,760 | +0.154¢ |
+| down < 1¢ | 6,788 | −0.103¢ |
+| down ≥ 1¢ | 22,614 | **−0.395¢** |
+
+A maker filled on the bid is filled because someone is selling, and the mid then
+falls another 0.10–0.40¢ on average. Netting that against the spread and rebate
+leaves roughly **+0.45¢ to +0.75¢ a share** — still positive, against −2.25¢ for
+taking the same trade.
+
+### The variable that decides it cannot be measured from here
+
+The spread is one cent, which is the minimum tick, so **there is no way to
+improve a quote — only to queue behind it.** Median resting depth is 124 shares,
+so a new order sits behind existing size and fills only when the queue clears,
+which is precisely when the price is about to go through it.
+
+**Queue position is the classic reason naive maker P&L is too optimistic, and
+nothing in this data measures it.** The +0.45¢ to +0.75¢ has to be discounted by
+an unknown factor, and testing it needs a different harness: signed limit orders
+resting in a real book, which this one has never sent.
