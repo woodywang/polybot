@@ -4195,3 +4195,59 @@ share, on a 60-cent contract, per fill.
 
 Which is a perfectly good description of why this instrument is unavailable to a
 $100 account run from a Python event loop that drops its own websocket.
+
+---
+
+## 77. Review: down to one arm, because there is one question left
+
+### (1) Health
+
+No crashes, no exceptions, ledger identity `$0.0000` on every arm with
+settlements. The round's health check found the drawdown breaker had been
+disabled by restarts for most of the session (section 75) — a fault the ledger
+was reporting correctly and that nothing else would have surfaced.
+
+### (2) Reports
+
+```
+arm            mkts    stake      NET      pct    maxDD    final
+paper_fav5       23   210.78   -62.36  -29.58%   62.4%    37.64
+maker_front       1    13.00    -7.92  -60.89%    7.9%    92.08
+observer          -        -        -        -        -        -
+```
+
+`maker_front` is one market. `paper_fav5` is 23, and its interest is not the
+-29.58% but the 62.4% drawdown that a 50% limit failed to stop.
+
+### (3) What was learned
+
+The pre-registered prediction failed (section 76) and named its own failure
+mode in advance. **Conditional post-fill movement is 5x unconditional movement**
+— 7.5c against 1.5c — so the spread-equals-volatility equilibrium of section 68
+was true and irrelevant. Making is closed at every queue position and spread.
+
+### (4) Fleet
+
+Retired `maker_wide`, `maker_front` and `paper_fav5`. All three test theses now
+closed by direct measurement, and `paper_fav5` was halted at 62.4% drawdown
+anyway. `maker_wide` produced 0 fills in 50 minutes against `makercheck`'s 14 in
+45 — when a diagnostic answers the same question an order of magnitude faster,
+keeping the slow arm is sentiment, not science.
+
+**One arm remains: `observer`.** It does not trade at all (`--min-edge 99`) and
+exists for one measurement — section 42's book calibration was taken on the
+broken feed, and every clean-feed arm since has carried `--fav-only`, which
+gates *before* the sample is written and therefore records only the dearer side.
+The observer logs both (50 Up, 50 Down so far), which is the unselected
+population section 42 needs to be re-tested against.
+
+That is the honest state of the project: **every strategy route is closed, and
+the single open question is whether a foundational measurement survives being
+re-taken on an instrument that works.**
+
+### Samples, stated plainly
+
+`observer` has 100 samples and 0 settled markets. Section 42 used 5,373 over
+168. **Nothing is concludable this round**, and the next several rounds will
+also conclude nothing, because the only remaining measurement needs roughly a
+day of collection to be comparable.
