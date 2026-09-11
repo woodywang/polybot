@@ -2323,3 +2323,54 @@ the spread is 0.7¢, so the only remaining structure in this instrument is to be
 on the receiving side of both. `makercheck.py` has been measuring markout on
 resting hourly bids for the last half hour, and it decides whether anything is
 left here at all.
+
+---
+
+## 46. The hourly market is a different instrument for a maker — by a factor of ten
+
+A maker's gross edge here is the half-spread and nothing else: there is no
+reliable exit, because crossing back costs the full spread twice over, so every
+fill is a directional position held to settlement. The edge survives only if the
+mid moves less than the half-spread while the order rests. That ratio is
+measurable from the paired quotes, and it is not close to the same on the two
+instruments.
+
+```
+                      half-spread    mid travel in 10s   ratio
+5-minute markets          0.50c           2.50c          0.2  (5x against)
+hourly markets            1.00c           0.50c          2.0  (2x in favour)
+```
+
+```
+5-minute   mid travel   10s median 2.50c   p75  7.00c   p90 13.50c  (n=207k)
+                        30s median 6.00c   p75 14.50c   p90 26.00c
+                        60s median 11.00c  p75 23.50c   p90 38.00c
+hourly     mid travel   10s median 0.50c   p75  1.50c   p90  3.00c  (n=46k)
+                        30s median 1.00c   p75  2.50c   p90  5.00c
+                        60s median 2.00c   p75  4.00c   p90  7.00c
+```
+
+The hourly book is **five times calmer and quotes twice as wide**. A ten-fold
+swing in the only ratio that matters to a maker.
+
+That is the first structural fact this project has found that favours doing
+something rather than not doing it, and it explains why the 5-minute markets
+were hopeless from both sides at once: a taker pays a 1.6¢ fee into a calibrated
+book, and a maker offers 0.5¢ of edge against a mid that moves 2.5¢ in ten
+seconds.
+
+### It is still thin, and adverse selection is the whole question
+
+A 1¢ edge against 0.5¢ of ten-second travel is a margin, not a moat, and the
+travel figure understates the danger: fills are not random draws from that
+distribution. A resting bid is hit precisely when someone with a Binance feed
+has seen the price move — and on a BTC market, that is everyone. The relevant
+number is not how far the mid travels, it is how far it travels **after your
+order fills**, which is markout, and `makercheck.py` has been measuring exactly
+that on live hourly books. If markout is worse than −1¢ there is nothing here.
+
+Worth stating plainly what the prize is, since it is larger than the spread
+alone: a maker avoids the `7% × (1-p)` taker fee as well, about 1.7¢ at the
+money. Spread plus fee is ~2.7¢ a share against a ~55¢ contract, close to 5%
+per position. That is the number adverse selection has to eat before this is
+dead.

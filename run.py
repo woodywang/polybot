@@ -1209,6 +1209,34 @@ def report(a):
                   f"{statistics.mean(v):>+12.4f}{statistics.mean(nt):>+10.4f}"
                   f"{tt:>+8.2f}")
 
+    print("\nadverse-selection exposure of a resting order")
+    # --- how far does the mid travel while an order rests?
+    # A maker's gross edge is the half-spread and nothing else.  It survives only
+    # if the mid moves less than that between posting and filling, and on these
+    # markets the informed trader is anyone with a Binance feed -- which is
+    # everyone.  This is the size of the gun pointed at a resting bid.
+    seq = {}
+    for slug, ts, au, ad in db.execute(
+            "SELECT slug,ts,ask_up,ask_dn FROM pairs ORDER BY slug, ts"):
+        if not au or not ad:
+            continue
+        seq.setdefault(slug, []).append((ts, (au + 1.0 - ad) / 2.0))
+    for h in (10.0, 30.0, 60.0):
+        mv = []
+        for pts in seq.values():
+            j = 0
+            for i, (t, m) in enumerate(pts):
+                while j < len(pts) and pts[j][0] < t + h:
+                    j += 1
+                if j >= len(pts):
+                    break
+                mv.append(abs(pts[j][1] - m))
+        if len(mv) > 100:
+            mv.sort()
+            print(f"  mid travel in {h:>4.0f}s:  median {mv[len(mv)//2]*100:5.2f}c"
+                  f"   p75 {mv[int(len(mv)*.75)]*100:5.2f}c"
+                  f"   p90 {mv[int(len(mv)*.9)]*100:5.2f}c   n={len(mv):,}")
+
     # --- is the edge in the book's belief, or only inside the spread?
     # Section 44 found real momentum in the price path but could not say whether
     # the book misses it.  These are two different questions and the spread is
