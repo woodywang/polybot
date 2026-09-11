@@ -127,6 +127,13 @@ class Book:
         """
         return (now or time.time()) - self.touched if self.touched else 1e9
 
+    def best_bid(self):
+        live = [p for p, s in self.bids.items() if s > 0]
+        if not live:
+            return None, 0.0
+        p = max(live)
+        return p, self.bids[p]
+
     def best_ask(self):
         live = [p for p, s in self.asks.items() if s > 0]
         if self.hint is not None:
@@ -150,6 +157,7 @@ class State:
         self.pos = {}                 # (slug, side) -> [shares, cost_incl_fee]
         self.lots = {}                # (slug, side) -> deque([shares, cost/share])
         self.pending = set()          # (slug, side) with a fill in flight
+        self.rest = {}                # token -> resting simulated bid
         self.kl = {k: {} for k in a.assets}        # asset -> interval -> closes
         # Real money management: an account of `bankroll` dollars cannot deploy
         # more than it holds, and capital stays committed until the market it
@@ -476,6 +484,16 @@ async def feed_books(st):
                                     if c.get("asset_id"):
                                         st.books.setdefault(
                                             c["asset_id"], Book()).level(c)
+                            elif et == "last_trade_price" and st.cfg.maker:
+                                # A sell at or below a resting bid is flow that
+                                # has to clear the queue ahead of it before it
+                                # reaches us.  This is the only fill evidence
+                                # the public feed gives.
+                                if m.get("side") != "SELL":
+                                    continue
+                                o = st.rest.get(m.get("asset_id"))
+                                if o and float(m["price"]) <= o["price"] + 1e-9:
+                                    o["sold"] += float(m["size"])
                 finally:
                     pt.cancel()
         except Exception as e:
@@ -589,8 +607,11 @@ async def resolve(st):
 
 
 # --------------------------------------------------------------- trading
-def log(st, kind, slug, snap, side, ask, depth, ed, sz=None):
-    fee = fair.taker_fee(ask, sz) if sz else None
+def log(st, kind, slug, snap, side, ask, depth, ed, sz=None, fee=None):
+    # A maker pays no taker fee, so the fee is passed in rather than derived.
+    # `0.0` and `None` mean different things here and `or` would conflate them.
+    if fee is None:
+        fee = fair.taker_fee(ask, sz) if sz else None
     # Named columns, not positional: the table has grown three times and a
     # positional INSERT drifts silently until it hits a live row.
     st.db.execute(
@@ -669,6 +690,45 @@ async def fill(st, kind, slug, side, tok, snap, cap):
             st.db.commit()
     finally:
         st.pending.discard((slug, side))
+
+
+def maker_step(st, slug, side, tok, snap, now, mid):
+    """Simulate one resting bid at the touch, and fill it when the queue clears.
+
+    Section 49: the hourly book's mid under-prices the favourite by ~4.3 points
+    over 0.55-0.65, and the taker fee plus half-spread is larger than that. A
+    maker pays no fee and is handed the half-spread instead of paying it, which
+    turns the same edge from +1.6c (t=1.5) into +5.3c (t=4.8) -- *if* fills
+    arrive independently of what happens next, which is the part no historical
+    file can answer.
+
+    Queue model: a joiner sits behind the size already resting at that price and
+    fills once cumulative sells at or below it exceed that size.  Moving the
+    best bid cancels and replaces, which resets queue position -- what actually
+    happens to a real order.  `last_trade_price` is the only fill evidence the
+    public feed gives and it may report only price *changes*, so detected volume
+    is a lower bound and so is the fill rate.
+    """
+    bk = st.books.get(tok)
+    bid, qsz = bk.best_bid() if bk else (None, 0.0)
+    if (bid is None or not st.cfg.min_ask <= mid <= st.cfg.max_price
+            or snap["tau"] <= st.cfg.min_tau_open or st.halted):
+        st.rest.pop(tok, None)
+        return
+    o = st.rest.get(tok)
+    if o is None or abs(o["price"] - bid) > 1e-9:
+        st.rest[tok] = dict(price=bid, ahead=qsz, sold=0.0, born=now)
+        return
+    if o["sold"] < o["ahead"]:
+        return
+    st.rest.pop(tok, None)
+    room = min(st.cfg.max_per_market - st.held(slug, side)[1],
+               st.equity - st.committed)
+    if room <= 0:
+        return
+    sz = min(st.cfg.max_usd, room) / bid
+    if sz > 0:
+        log(st, "open", slug, snap, side, bid, qsz, mid - bid, sz, fee=0.0)
 
 
 def kelly_usd(p, ask, bankroll, frac):
@@ -793,6 +853,14 @@ async def strategy(st):
                 if st.cfg.fav_only and a_up and a_dn:
                     if (ask - (a_dn if side == "Up" else a_up)) * st.cfg.fav_only <= 0:
                         continue
+
+                if st.cfg.maker:
+                    if not a_up or not a_dn:
+                        continue          # no mid without both sides quoted
+                    m_up = (a_up + (1.0 - a_dn)) / 2.0
+                    maker_step(st, slug, side, tok, snap, now,
+                               m_up if side == "Up" else 1.0 - m_up)
+                    continue
 
                 # --- confidence haircut: the random-walk null says the book is
                 # the consensus estimate and our p is one noisy model's opinion.
@@ -1503,6 +1571,10 @@ if __name__ == "__main__":
                    help="require implied/realised sigma above this before "
                         "opening; the trade pays when the book prices more "
                         "uncertainty than the tape delivers. 0 disables")
+    p.add_argument("--maker", type=int, default=0,
+                   help="post at the touch instead of taking.  Pays no fee and "
+                        "earns the half-spread, at the cost of only filling "
+                        "when someone chooses to hit you.")
     p.add_argument("--fav-only", type=int, default=0,
                    help="1: only buy the dearer side, -1: only the cheaper, "
                         "0: either.  Names a side by the complement's quote "

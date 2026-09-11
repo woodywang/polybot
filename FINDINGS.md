@@ -2579,3 +2579,64 @@ t-statistic.
 - A maker in the 0.55-0.65 band would keep +5.30¢ a share, t = 4.79, **if fills
   are independent of what happens next**. That assumption is still the whole
   question and `makercheck.py` is still the thing that answers it.
+
+---
+
+## 50. A maker arm, and the instrument checks it rests on
+
+Section 49's number — a maker keeping +5.3¢ a share at t = 4.79 over 517 hours —
+assumes fills arrive independently of what happens next. No historical file can
+test that, so `run.py` gains `--maker`: it posts at the touch instead of taking,
+pays no fee, and fills when the queue ahead of it clears.
+
+It reuses the existing discovery, settlement, equity and drawdown machinery and
+writes into the same schema, so P&L still comes only from `--report`. What is
+new is `Book.best_bid()`, a `last_trade_price` handler, a resting-order
+lifecycle, and a fee override on `log()` — a maker's fee is `0.0`, which is not
+the same as `None`, so it is passed rather than derived.
+
+Queue model: a joiner sits behind the size already resting at that price and
+fills once cumulative sells at or below it exceed that size. Moving the best bid
+cancels and replaces, resetting queue position, which is what happens to a real
+order.
+
+Two arms, `maker_fav` on the favourite at mid 0.55-0.65 and `maker_dog` on the
+underdog at 0.35-0.45. Complements again, so they cannot both profit.
+
+### Four instrument checks before trusting any of it
+
+**`prices-history` is a mid.** Both tokens of one market summed at paired
+timestamps: median exactly 1.0000, range 0.985-1.010. Two asks would sum to
+~1.02. This is what forced the spread correction in section 49.
+
+**Trade events carry what the fill model needs.** `last_trade_price` arrives
+with `asset_id`, `price`, `size` and `side`. But only **7 trades in 90 seconds
+across 12 tokens** — roughly one per token every 2.6 minutes. Worse, the event
+may report only price *changes*, so trades at an unchanged price are invisible:
+**detected volume is a lower bound, and so is every fill rate built on it.**
+
+**The tick is 1¢ exactly where the strategy lives.** A `tick_size_change` from
+0.01 to 0.001 fired during the sample, which would have invalidated the 1¢
+half-spread. Checking 108k hourly quotes: 3.1% sit on a sub-cent tick, and they
+are **all** at 0.95+. Between 0.50 and 0.70 the figure is 0.0%.
+
+**The pooled estimate is not a boundary artifact:**
+
+```
+[0.55,0.65)  516 hours  +0.0449  t=+4.04
+[0.55,0.65]  516 hours  +0.0448  t=+4.03
+[0.55,0.70)  517 hours  +0.0408  t=+3.65
+[0.50,0.70)  527 hours  +0.0384  t=+4.04
+```
+
+Split by time remaining, no single ten-minute band is significant on its own
+(+0.9 to +3.4 points, t = 0.5 to 2.0) — the edge is spread across the hour
+rather than concentrated in it, which is what a maker needs, since a resting
+order cannot choose its moment.
+
+### The part that makes this worth running
+
+Of the maker's +5.3¢, only **1.0¢ is spread capture**; +4.3¢ is the book's own
+bias. So a maker who has to improve the bid to get queue priority — giving up
+the entire spread and buying at the mid — still holds +4.3¢ and pays no fee.
+**Queue competition cannot take this edge away; only adverse selection can.**
