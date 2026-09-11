@@ -1,16 +1,14 @@
-"""Measure whether a resting order would actually get filled.
+"""Would a resting order actually fill? Measured against trades, not the book.
 
-The maker case rests on one number nothing so far has measured: joining the
-queue at the best bid, does the size ahead get consumed before the price moves
-away? Two outcomes for a price level, and only one of them fills you:
+The first version of this tracked the best-bid price level and called it dead
+whenever the best bid moved -- which counts "somebody bid higher" as "your order
+died", and reported a 0% fill rate that was mostly that bug.
 
-  consumed  -- size at that price falls while the price stays; trades are
-               happening and the queue is advancing toward you
-  abandoned -- the best price moves; whatever was resting is now behind the
-               market and fills only if the price comes back
-
-Records, for each time the best bid takes a new price, how much size was
-consumed at that level and how long it survived.
+This one measures the thing that actually fills an order. A maker resting on the
+bid is filled when a taker SELLS into it, so for each best-bid level we track
+the resting size a joiner would queue behind and the cumulative sell-side volume
+that trades at or below that price while the level is alive. The joiner fills
+when that volume exceeds the size ahead.
 """
 import asyncio, json, time, statistics, urllib.request
 from collections import defaultdict
@@ -29,22 +27,20 @@ def get(u):
 
 async def main(minutes=14):
     books, meta = {}, {}
-    lvl = {}                      # token -> [price, peak_size, last_size, born]
+    lvl = {}                 # token -> dict(price, ahead, sold, born)
     done = []
     stop = time.time() + minutes * 60
 
-    def note(tok, price, size, now):
+    def roll(tok, price, size, now):
         cur = lvl.get(tok)
-        if cur is None or abs(cur[0] - price) > 1e-9:
-            if cur is not None:
-                eaten = max(cur[1] - cur[2], 0.0)
-                done.append(dict(tok=tok[:10], price=cur[0], peak=cur[1],
-                                 left=cur[2], eaten=eaten, life=now - cur[3],
-                                 cleared=cur[2] <= 1e-9))
-            lvl[tok] = [price, size, size, now]
-        else:
-            cur[1] = max(cur[1], size)
-            cur[2] = size
+        if cur is not None and abs(cur["price"] - price) < 1e-9:
+            cur["ahead"] = min(cur["ahead"], size)   # queue can only shrink ahead of us
+            return
+        if cur is not None:
+            done.append(dict(price=cur["price"], ahead0=cur["ahead0"],
+                             sold=cur["sold"], life=now - cur["born"],
+                             filled=cur["sold"] >= cur["ahead0"]))
+        lvl[tok] = dict(price=price, ahead=size, ahead0=size, sold=0.0, born=now)
 
     async def refresh():
         while time.time() < stop:
@@ -74,13 +70,13 @@ async def main(minutes=14):
                         j = json.loads(raw)
                         for m in (j if isinstance(j, list) else [j]):
                             et = m.get("event_type")
+                            now = time.time()
                             if et == "book" and m.get("asset_id"):
                                 bk = {float(x["price"]): float(x["size"])
                                       for x in m.get("bids", []) if float(x["size"]) > 0}
                                 books[m["asset_id"]] = bk
                                 if bk:
-                                    p = max(bk)
-                                    note(m["asset_id"], p, bk[p], time.time())
+                                    p = max(bk); roll(m["asset_id"], p, bk[p], now)
                             elif et == "price_change":
                                 for c in m.get("price_changes", []):
                                     t = c.get("asset_id")
@@ -93,23 +89,31 @@ async def main(minutes=14):
                                     else:
                                         bk[px] = sz
                                     if bk:
-                                        p = max(bk)
-                                        note(t, p, bk[p], time.time())
+                                        p = max(bk); roll(t, p, bk[p], now)
+                            elif et == "last_trade_price":
+                                t = m.get("asset_id")
+                                cur = lvl.get(t)
+                                # a maker on the bid fills when a taker sells
+                                if cur and m.get("side") == "SELL":
+                                    if float(m["price"]) <= cur["price"] + 1e-9:
+                                        cur["sold"] += float(m["size"])
             except Exception:
                 await asyncio.sleep(2)
 
     await asyncio.gather(refresh(), feed())
-    print(f"\n=== {len(done)} best-bid levels observed to the end of their life ===")
-    if len(done) < 20:
+    print(f"\n=== {len(done)} best-bid levels tracked to their end ===")
+    if len(done) < 30:
         return
-    cleared = [d for d in done if d["cleared"]]
-    print(f"  queue fully cleared (a joiner would have filled): {len(cleared)} "
-          f"({len(cleared)/len(done)*100:.0f}%)")
-    print(f"  level lifetime      median {statistics.median([d['life'] for d in done]):.1f}s")
-    print(f"  size at the level   median {statistics.median([d['peak'] for d in done]):.0f} sh")
-    eaten = [d["eaten"] / d["peak"] for d in done if d["peak"] > 0]
-    print(f"  fraction consumed   median {statistics.median(eaten)*100:.0f}%  "
-          f"mean {statistics.mean(eaten)*100:.0f}%")
+    filled = [d for d in done if d["filled"]]
+    print(f"  a joiner behind the whole queue would have filled: "
+          f"{len(filled)} ({len(filled)/len(done)*100:.1f}%)")
+    print(f"  size ahead at join   median {statistics.median([d['ahead0'] for d in done]):.0f} sh")
+    print(f"  sell volume at level median {statistics.median([d['sold'] for d in done]):.0f} sh"
+          f"   mean {statistics.mean([d['sold'] for d in done]):.0f} sh")
+    print(f"  level lifetime       median {statistics.median([d['life'] for d in done]):.2f}s")
+    ratio = [d["sold"] / d["ahead0"] for d in done if d["ahead0"] > 0]
+    print(f"  sold / size-ahead    median {statistics.median(ratio):.3f}"
+          f"   90th pct {sorted(ratio)[int(len(ratio)*0.9)]:.3f}")
     json.dump(done, open("queuecheck.json", "w"))
 
 

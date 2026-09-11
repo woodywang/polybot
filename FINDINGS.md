@@ -1044,3 +1044,51 @@ It supports only the weaker claim that **a resting order at the best quote is
 behind the market within 20 seconds about 89% of the time**, which is a warning
 for the maker case but not the queue-clearing rate. That needs the 250 ms book
 stream, which `queuecheck.py` collects.
+
+---
+
+## 23. A diagnostic retracted before it was published
+
+The queue question from section 21 got a diagnostic, and it returned something
+spectacular: of 9,114 best-bid levels, **0% ever cleared**, median lifetime
+0.1s. Read literally that says a maker order never fills and the whole maker
+case is dead.
+
+It says no such thing. The code closed a level whenever the **best bid price
+changed** — so when somebody bid *higher*, the level at the old price was
+recorded as having died with its size intact, counted as "did not clear". The
+0% is mostly that bug. What survives from it is narrow: the best bid is a very
+unstable place (median 0.1s between changes) and a mean 21% of resting size is
+consumed before a level stops being best.
+
+This one was caught before it reached a conclusion, unlike the frozen-book
+result, which ran for four sections first. The tell was the same both times —
+a number too extreme for the mechanism to produce.
+
+### The right measurement needs trades, and the feed has them
+
+Sampling the websocket for 55 seconds across 12 tokens:
+
+| event | count |
+|---|---|
+| `price_change` | 65,350 |
+| `book` | 1,322 |
+| **`last_trade_price`** | **602** |
+
+Trades carry `price`, `size`, `side` and `asset_id` — roughly 0.9 per second per
+token. A maker resting on the bid fills when a **taker sells** into it, so the
+measurement is cumulative sell-side volume at or below the level's price against
+the size a joiner would queue behind. The diagnostic is rewritten to that and
+running.
+
+### Arm status
+
+| arm | markets | result |
+|---|---|---|
+| `paper100_spot` (guarded) | 14 with positions | +22.10%/market, **t = 1.02** |
+| `paper100_base/fav/vrp/filt` | 0–3 | restarted with the guard, too young |
+| `paper_lock` / `paper_dir` | historical, unguarded | +1.93% / −1.92% |
+
+The guarded arm needs about **54 markets** for t = 2 and has 14. Nothing is
+concluded from +22%; per-market standard deviation is 81%. **Sample
+insufficient — no parameter changes made this round.**
