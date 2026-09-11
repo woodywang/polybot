@@ -2164,3 +2164,96 @@ complements of the same quotes, so **they cannot both be profitable** — their
 sum is exactly minus twice the fee. That makes the pair its own instrument
 check: if both show a profit, the harness is broken, and I would rather find
 that out from a rule that cannot be true than from a number I want to believe.
+
+---
+
+## 44. Five-minute crypto has real momentum — measured with no volatility estimate
+
+Section 43's favourite effect had an obvious alternative explanation: "the
+favourite" is just "the side currently ahead", and five trending hours would
+manufacture it. 64 windows cannot separate those. 30 days of 1-minute klines
+can, and no book data is involved, so nothing in it can be a book artifact.
+
+Pricing the lead with a driftless random walk against 8,627 windows per asset:
+
+```
+tau           obs  windows   mean p   too timid       t
+60s        25,881    8,627    0.836     +0.0261  +11.47
+120s       25,881    8,627    0.768     +0.0237   +8.24
+180-240s   51,762    8,627    0.675     +0.0134   +4.48
+```
+
+And bucketed by the favourite's price, net of the `7%p(1-p)` fee — the table
+that decides tradability, because the same edge in probability points is worth
+very different amounts at different prices:
+
+```
+price          obs  windows   too timid    net/sh   t(net)
+0.50-0.55   26,907    7,139     +0.0314   +0.0141    +3.60
+0.55-0.60   21,159    7,495     +0.0528   +0.0369    +8.91
+0.60-0.65   17,184    7,275     +0.0410   +0.0279    +6.86
+0.65-0.70   14,844    6,765     +0.0220   +0.0130    +3.63
+0.70+       23,430    6,396     -0.0124   -0.0150    -6.22
+```
+
+A hump on 0.55-0.65 that turns **negative** above 0.70. The live measurement in
+section 43 used real book prices in exactly the ≤0.65 band and gave +3.35¢ per
+share; this gives +2.79¢ to +3.69¢ in the same band from entirely different
+data with an entirely different price source.
+
+### The estimator was doing some of the work
+
+Sweeping the trailing-vol window moves the answer:
+
+```
+LOOK= 10 bars  net/sh +0.0299  t +6.98
+LOOK= 20 bars  net/sh +0.0345  t +8.24
+LOOK= 60 bars  net/sh +0.0374  t +9.09
+LOOK=120 bars  net/sh +0.0392  t +9.61
+LOOK=240 bars  net/sh +0.0440  t +10.89
+```
+
+Monotone in the length of the lookback, which is the signature of a sigma that
+runs high: too much assumed volatility puts the model price too near 0.5 and the
+favourite beats it for no reason but the estimator. A result that moves with a
+free parameter is not yet a property of the market.
+
+### So take sigma out entirely
+
+For Brownian motion the chance that the sign of the move survives to the end of
+the window depends only on the fraction elapsed, through
+`corr(W_t, W_T) = sqrt(t/T)`:
+
+```
+P(W_T > 0 | W_t > 0) = 1/2 + arcsin(sqrt(t/T)) / pi
+```
+
+No volatility, no estimation, no fitted parameter. Against 30 days:
+
+```
+elapsed   windows   brownian   actual    excess       t
+1/5         8,590     0.6476   0.6607   +0.0131   +3.30
+2/5         8,613     0.7180   0.7358   +0.0178   +4.95
+3/5         8,620     0.7820   0.8037   +0.0216   +6.80
+4/5         8,621     0.8524   0.8758   +0.0234   +9.28
+```
+
+**Five-minute crypto windows persist more than a martingale allows**, by 1.3 to
+2.3 percentage points, growing with elapsed time, on 8,600 independent windows
+with nothing fitted. That is a property of the price path.
+
+### But this is a fact about the model, not yet about the market
+
+Momentum in the series is only worth money if the **book** misses it, and
+section 42 measured the book as calibrated at exactly the prices where this
+effect is largest: ask 0.839 → won 0.836, ask 0.955 → won 0.961. If the book
+already prices the persistence, the 30-day test measures the random walk's
+error and not an inefficiency — which is precisely what sections 41 and 42
+concluded from the other direction.
+
+Section 43's +5pp on the book's own dearer side says the opposite, at t = 1.8 on
+64 windows. The two cannot both be right and the live sample is far too small to
+settle it. The next measurement has to compare the outcome against the **book's**
+price, split by mid and by ask: if the book's mid is calibrated but its ask is
+not beatable, the entire edge sits inside the spread, and that makes this a
+maker question rather than a taker one.
