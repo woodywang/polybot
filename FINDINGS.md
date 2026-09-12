@@ -5554,3 +5554,61 @@ negative **before** any arm was launched or any capital modelled.
 
 That is the first time in ninety-eight sections the check came before the
 commitment rather than after it.
+
+---
+
+## 99. The ladder's tails are calibrated as well, and its middle is empty
+
+Section 98 tested the ladder's centre. The wings are a separate claim —
+prediction markets classically overprice longshots, and a smile that is too
+steep shows up as far strikes settling in-the-money less often than priced.
+Scoring every strike's implied probability against the actual noon-ET close,
+per day (strikes inside one day share one price path, so the effective sample is
+the **day** count):
+
+```
+implied      obs  days   mean p     hit     miss
+0.0-0.1       79    18    0.014   0.009   -0.005
+0.1-0.2        4     4    0.158   0.000   -0.158
+0.2-0.3        5     5    0.245   0.400   +0.155
+0.3-0.4        1     1    0.312   0.000   -0.312
+0.4-0.5        3     3    0.408   0.333   -0.075
+0.5-0.6        1     1    0.570   0.000   -0.570
+0.6-0.7        7     7    0.643   0.429   -0.214
+0.7-0.8        2     2    0.780   0.500   -0.280
+0.8-0.9        3     3    0.857   1.000   +0.143
+0.9-1.0      125    20    0.990   1.000   +0.010
+```
+
+**Where the data is, the book is right to within one percentage point.** The
+deep wings carry 204 of the 230 observations: 0.014 implied against 0.009
+realised, and 0.990 against 1.000. The classic longshot bias would show as a
+large positive gap in the bottom row; it is -0.005, or 0.18 standard errors on
+18 effective days.
+
+The middle buckets deviate by up to 57 points and mean nothing — **one to seven
+observations each.** A ladder of fixed strikes around a spot that moves puts
+almost all its strikes far from the money; the interesting region is empty by
+construction.
+
+That is worth stating as a limitation rather than hiding in the table. **This
+test has power in the tails and none at the money**, and any future version needs
+strikes chosen relative to spot rather than in round thousands.
+
+### Where that leaves it
+
+Five features tested for whether the book already prices them, now six:
+
+```
+momentum within a window     real   priced
+near-money favourite         real   priced
+hour-to-hour reversal        real   priced
+cross-asset lead-lag          --    priced
+implied vol term structure    --    priced (IV/RV median 0.993)
+strike ladder tails           --    priced (within 1 point)
+```
+
+The instrument that looked most tractable — observable settlement, deep book, a
+horizon where the fee arithmetic works — turns out to be priced correctly in its
+level, its volatility, and its tails. **There is nothing wrong with it. That is
+the problem.**

@@ -92,6 +92,7 @@ def main(lead_h=16.0, limit=20):
             f"&order=endDate&ascending=false") or []
     print(f"{len(evs)} closed events in btc-multi-strikes-weekly\n")
     rows = []
+    cal = {}
     for e in evs:
         mk = e.get("markets") or []
         end = e.get("endDate")
@@ -100,6 +101,7 @@ def main(lead_h=16.0, limit=20):
         t_end = int(time.mktime(time.strptime(end[:19], "%Y-%m-%dT%H:%M:%S")))
         t_obs = t_end - int(lead_h * 3600)
         pairs = []
+        settle = None
         for m in mk:
             s = m.get("slug", "")
             try:
@@ -116,6 +118,13 @@ def main(lead_h=16.0, limit=20):
                 continue
             p = min(pts, key=lambda x: abs(int(x["t"]) - t_obs))
             pairs.append((k, float(p["p"])))
+        # what actually happened: the noon-ET close
+        kl_end = klines((t_end - 300) * 1000, (t_end + 60) * 1000)
+        settle = kl_end[-1][1] if kl_end else None
+        if settle:
+            for k, p in pairs:
+                b = min(int(p * 10), 9)
+                cal.setdefault(b, []).append((end[:10], p, 1.0 if settle > k else 0.0))
         fit = fit_ladder(pairs)
         if not fit:
             print(f"  {end[:10]}  {len(pairs)} strikes, no usable pair")
@@ -134,6 +143,28 @@ def main(lead_h=16.0, limit=20):
         print(f"  {end[:10]}  {len(pairs):>2} strikes  spot {spot0:>9,.0f}"
               f"  implied median {med:>9,.0f}  IV {iv*100:>5.1f}%"
               f"  RV {rv*100:>5.1f}%  IV/RV {iv/rv:>5.2f}")
+    # --- is the LADDER calibrated, not just its centre?
+    # Section 98 fits the two strikes straddling the median and finds the
+    # implied vol unbiased.  The wings are a different claim: prediction markets
+    # classically overprice longshots, and a smile that is too steep would show
+    # up as far strikes settling in-the-money less often than they were priced.
+    # Strikes inside one day share a single price path, so the effective sample
+    # is the DAY count, not the strike count -- scored per day, then pooled.
+    if cal:
+        print("\n  ladder calibration: implied probability vs what happened")
+        print(f"    {'implied':<12}{'obs':>6}{'days':>6}{'mean p':>9}{'hit':>8}{'miss':>9}")
+        for b in sorted(cal):
+            v = cal[b]
+            per = {}
+            for d, p, y in v:
+                e = per.setdefault(d, [0, 0.0, 0.0])
+                e[0] += 1; e[1] += p; e[2] += y
+            mp = st.mean([x[1] / x[0] for x in per.values()])
+            hy = st.mean([x[2] / x[0] for x in per.values()])
+            lbl = f"{b/10:.1f}-{b/10+0.1:.1f}"
+            print(f"    {lbl:<12}{len(v):>6}{len(per):>6}{mp:>9.3f}{hy:>8.3f}"
+                  f"{hy-mp:>+9.3f}")
+
     if len(rows) >= 4:
         ra = [r["ratio"] for r in rows if r["ratio"]]
         ivs = [r["iv"] for r in rows]
