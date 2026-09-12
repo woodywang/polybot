@@ -6262,3 +6262,66 @@ represent this market, so its residuals are not the error.
 **An error bar is only as good as the model that produced it**, and the fix was
 never a better inference. It was one HTTP request to a source I had assumed was
 unavailable after three failures — and did not retry with a different provider.
+
+---
+
+## 111. A consistency check with three free parameters and one target is not a check
+
+With WTI finally observed at $100, section 109's cross-market question becomes
+answerable: do the oil barriers and the geopolitical markets price the same
+escalation coherently? The barrier needs +30% to touch $130, and the platform
+prices the paths that would do it:
+
+```
+channel                          market px   window   prob in Sept
+US invades Iran before 2027          0.155   3.7 mo          0.025
+Bab el-Mandeb closed by Sep 30       0.088     18 d          0.088
+Kharg Island lost by Sep 30          0.017     18 d          0.017
+Hormuz still disrupted Sep 30        0.981     18 d       (already)
+```
+
+Decomposing:
+
+```
+invasion in Sept       0.025 x P(+30%|event)=0.70  ->  1.76%
+bab-el-mandeb closes   0.088 x P(+30%|event)=0.30  ->  2.64%
+kharg lost             0.017 x P(+30%|event)=0.50  ->  0.85%
+                                              total    5.25%
+                                             market    4.75%
+```
+
+Half a percentage point apart. It is tempting to call that coherence.
+
+**It is not, and the reason matters more than the number.** The three
+`P(+30%|event)` terms are my judgement — 0.70, 0.30, 0.50 chosen because they
+felt right. Three free parameters fitted to one target **cannot fail**. I could
+have produced 3% or 8% as easily by nudging values nobody can check.
+
+What the exercise does establish is weaker and still worth having: **no
+implausible conditional is required.** Reaching the market's 4.75% does not
+demand that a US invasion of Iran leave oil unmoved, or that a Bab el-Mandeb
+closure be near-certain to add 30%. The market's price sits comfortably inside
+the range that ordinary judgements produce. A *gross* inconsistency would have
+shown up; a subtle one cannot.
+
+### Where the boundary actually is
+
+Sections 108 through 111 walked into the one category on this platform that is
+cheap, liquid, and computable — and found that pricing it requires conditional
+probabilities linking geopolitical events to oil moves. **Those are not in any
+order book.** The cross-market structure is *checkable* only down to the
+resolution that free parameters allow, which here is no resolution at all.
+
+That is the same boundary section 108 named, arrived at from the other side:
+this harness can price diffusion, and everything Polymarket charges little for
+resolves on events. The difference is that I now know the boundary is not about
+**data availability** — Yahoo had the oil price the whole time — but about
+**the kind of quantity the question needs.**
+
+### Tenth lesson, and the most general
+
+The nine before it were about scope, conditioning, and precision. This one is
+about **degrees of freedom**: a test with more knobs than observations will
+always agree with whatever it is testing, and reporting that agreement as
+evidence is the most comfortable mistake in the file — because nothing looks
+wrong, the arithmetic checks out, and the answer is what you expected.
