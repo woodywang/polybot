@@ -6648,3 +6648,61 @@ Twelve instances now of the same ending. **Not once has the obstacle been that
 the market was efficient in some abstract sense — every single time it has been
 that the thing I needed to measure was smaller than the resolution of the
 instrument available to measure it.**
+
+---
+
+## 117. Polymarket's BTC surface agrees with Deribit to inside my own measurement error
+
+Section 116 could not resolve the Polymarket-versus-Deribit comparison because
+the 8-hour expiry mismatch was 53% of a 15-hour horizon. The fix is to make the
+horizon longer: the series runs daily events out to a week, and Deribit has a
+September 18 expiry.
+
+```
+Deribit     09-18 08:00   6.29 days   ATM IV  34.3%   open interest 260
+Polymarket  09-18 16:00   6.70 days   two-strike fit  32.8%
+                                      least-squares   37.9%
+
+expiry mismatch  8h = 5% of the horizon   (was 53% at the short end)
+```
+
+**Deribit's 34.3% falls between my two fits of the same Polymarket ladder.**
+
+- Take the two-strike (ATM) fit and Polymarket is **1.5 points cheap**.
+- Take the least-squares (smile-weighted) fit and Polymarket is **3.6 points
+  rich**.
+
+The sign of the disagreement is determined by a modelling choice I established
+in section 103 that I cannot resolve from the data. **The professional options
+market lands inside my own error bar.**
+
+That is the strongest available statement, and it is not "no edge" — it is
+**agreement to within the precision of the best comparison this project can
+construct**, with a clean settlement reference on both sides (§87), a liquid
+external quote, matching strikes, and quote quality verified before use (§116).
+
+### The complete answer, six ways
+
+Polymarket's pricing has now been checked against an independent standard on six
+separate instruments:
+
+```
+instrument                        standard                    result
+5-minute crypto book              outcomes, 5,373 quotes      calibrated
+hourly crypto book                outcomes, 93k quotes        calibrated
+daily BTC ladder                  subsequent realised vol     unbiased ±5 pts
+daily BTC ladder                  internal no-arbitrage       zero violations
+Fed decision markets              fed funds futures           within 1 bp
+daily BTC ladder                  Deribit options             within fit error
+```
+
+Six instruments, five external standards, one internal consistency check. **Every
+one agrees.** That is no longer a series of null results — it is a positive
+finding about the venue, established from enough directions that the conclusion
+does not rest on any single measurement.
+
+**Polymarket's crypto and rates markets are efficiently priced against the
+professional markets that trade the same risk.** What remains for an outsider is
+the fee, which sections 95 and 96 showed is the largest on the platform for
+crypto and demands a forecast finer than the settlement mechanism's own
+resolution at five-minute horizons.
