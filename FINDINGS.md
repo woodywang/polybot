@@ -6082,6 +6082,10 @@ That closes the last open thread from the question that opened it.
 
 ## 108. The cheap category prices jump risk, which is a view I do not have
 
+> **The "$75.0" is spuriously precise — see section 109.** Within the bid-ask
+> alone the implied spot ranges $67.8 to $81.1. The 110-145% implied vol is
+> robust; the level is not.
+
 Section 95 found crypto is the most expensive category and noted the trade-off:
 the cheaper categories have no continuously observable fair value. There is one
 exception — `finance_prices_fees` at 0.04 with a 0.25 rebate (3.0% net against
@@ -6137,3 +6141,65 @@ computable turns out to be priced on an event rather than a diffusion.
 That is the boundary of the project, located precisely: **this harness can price
 anything whose uncertainty is diffusion. Everything Polymarket charges little
 for is priced on jumps.**
+
+---
+
+## 109. The implied spot was ill-conditioned, and the cross-market question stays open
+
+Section 108 recovered "implied WTI spot ~ $75.0" from two barrier prices and
+offered it as a cross-check on the method. Testing how well-determined that is —
+varying only within the quoted bid-ask, `0.044-0.051` and `0.011-0.014`:
+
+```
+  p130     p150    implied S   implied vol
+0.0440   0.0110        75.4         122%
+0.0440   0.0140        67.8         145%
+0.0475   0.0125        75.0         125%
+0.0510   0.0110        81.1         109%
+0.0510   0.0140        74.8         127%
+```
+
+**$67.8 to $81.1** — a 20% band from the spread alone, before any modelling
+error. The reason is structural: both barriers are far out of the money and
+close to each other, so the pair constrains the **shape of the tail** and barely
+constrains the **level**. A small change in either price trades off against the
+volatility and moves the spot a long way.
+
+The **110-145% implied volatility is robust** across the whole grid, and that is
+the finding that matters — it is three times a normal oil volatility, which is
+section 108's point about jump risk and stands unchanged.
+
+### The cross-market question I cannot close
+
+The geopolitical markets say the Strait of Hormuz is currently disrupted:
+
+```
+hormuz traffic returns to normal by Sep 15    0.003
+hormuz traffic returns to normal by Sep 30    0.019
+hormuz traffic returns to normal by Dec 31    0.195
+bab-el-mandeb effectively closed by Sep 30    0.088
+israel closes its airspace by Sep 30          0.979
+us invades iran before 2027                   0.155
+```
+
+**A 1.9% chance of normal traffic by month-end.** Hormuz carries roughly a fifth
+of seaborne oil, and these markets are fee-free with $1.1M of daily volume
+between them.
+
+Whether that is *consistent* with WTI wherever it actually is — and with a 4.75%
+chance of touching $130 — is a genuine relative-value question that needs no
+geopolitical view, only coherence between two groups of markets on the same
+platform. **I cannot answer it, because I cannot obtain the WTI price from this
+machine**, and section 108's attempt to infer it turns out to have a 20% error
+bar.
+
+Recorded as the open question it is. It is the only one in this project that
+could be settled by a single additional data feed rather than by more time or
+better methods.
+
+### Ninth instance, caught in one step
+
+The number was right, the method was right, and the **conditioning** was never
+checked. Same shape as section 103 — an instrument with a free choice I did not
+vary — except this time the check followed immediately, in the same breath as
+the claim, rather than three sections later.
