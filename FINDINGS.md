@@ -6818,3 +6818,67 @@ category on the platform), the settlement resolution (§96: finer than the
 reference is defined at five minutes), and the adverse selection (§76: -6.2c a
 fill) are not obstacles standing between a retail account and an edge. **They
 are the reason no edge is left by the time the quote is posted.**
+
+---
+
+## 120. ETH replicates BTC, on a richer instrument, and the fee eats the residual
+
+Section 119's result was BTC-only, and section 93 is the record of what happens
+when one asset's finding is read as general. Polymarket has no ETH strike
+ladder, but it has something better: a **double-sided one-touch barrier ladder**
+— 20 usable levels from $1,500 to $4,000, settling on Binance 1-minute candles
+through September. One-touch prices are far more volatility-sensitive than
+digitals, so this is a sharper test than the BTC ladder was.
+
+Fitting each barrier with the **drifted** one-touch formula (the risk-neutral
+log-drift is `-sigma^2/2`, worth 1-2 vol points here) against Deribit's ETH
+curve interpolated in total variance:
+
+```
+barrier  dir     mid   implied vol      deribit ATM @ 19.12d = 48.6%
+   2700   up  0.4750        45.5%       (13.29d anchor, OI 23,926)
+   2800   up  0.3050        47.6%
+   2900   up  0.2050        51.0%
+   2300   dn  0.4000        44.5%
+   2200   dn  0.2350        47.5%
+   2100   dn  0.1250        49.8%
+```
+
+**The barrier curve crosses Deribit's ATM between the second and third strike
+out, from both directions.** That is a smile behaving exactly as it should, with
+the professional market's ATM quote sitting inside it — the same relationship
+section 118 found on BTC, on a different asset and a different instrument type.
+
+### The residual, and why it is not a trade
+
+Pricing every barrier at Deribit's 48.6% and comparing to Polymarket's ask:
+
+```
+barrier  dir   PM ask   deribit-implied   edge     fee
+   2700   up    0.480            0.5016  +2.16c   1.75c
+   2800   up    0.310            0.3143  +0.43c   1.50c
+   2900   up    0.210            0.1847  -2.53c   1.16c
+   2300   dn    0.410            0.4436  +3.36c   1.69c
+   2200   dn    0.240            0.2466  +0.66c   1.28c
+   2100   dn    0.130            0.1159  -1.41c   0.79c
+```
+
+The largest edge is **+3.36¢ against a 1.69¢ fee** — and a 25% rebate returns
+0.42¢ of that, leaving +2.09¢ on a 41¢ stake, about 5%.
+
+It still is not a trade, for a reason the table makes plain: **the edges change
+sign across the ladder.** +2.16, +0.43, -2.53 going up; +3.36, +0.66, -1.41
+going down. A single ATM volatility cannot price a smiled surface, and the
+"edge" is just the difference between Deribit's smile and the flat-vol
+approximation I used to price the barriers. Fitting the smile would remove it —
+and I have no way to fit Deribit's ETH smile at these far strikes without the
+same illiquid-mark problem section 116 caught on BTC.
+
+### Where this leaves the six-way result
+
+**Seven ways now, and on two assets.** BTC's volatility surface matches Deribit
+to 0.22 points across seven expiries (§119); ETH's barrier ladder produces a
+smile whose centre matches Deribit's ATM and whose wings behave correctly, on an
+instrument type the BTC test never touched.
+
+The replication section 93 demanded has been done, and it holds.
