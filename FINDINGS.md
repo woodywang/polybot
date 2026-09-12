@@ -5940,3 +5940,75 @@ ones** — 1,581 hourly markets, 8,627 five-minute windows, 527 hours of book
 quotes — and they answered it consistently. The live arms were never going to
 add resolution; they added the discipline of a reconciled ledger, which turned
 out to be where the real errors were.
+
+---
+
+## 106. Review: the surface is exhausted, the ledger is clean, one measurement is pending
+
+### (1) Health
+
+```
+observer     drops 16   errors 0   1,770 samples (902 Down / 868 Up), 58 settled
+makercheck   drops  0   errors 0   finishing
+ledger identity  $0.0000  OK
+quote age        avg 0.058s   max 1.96s
+```
+
+Sides stay balanced (902/868), so the observer is still recording the
+unselected population section 42 needs. Its 16 slow-consumer drops as the sole
+5-minute subscriber remain the settled answer from section 73: intrinsic message
+rate, nothing to do with contention or token count.
+
+### (2) Reports
+
+```
+arm                 mkts    stake       NET      pct    maxDD
+observer               0     0.00     +0.00   +0.00%        -   (by design)
+paper_fav5            23   210.78    -62.36  -29.58%    62.4%
+paper_dog5            18   165.76    +18.24  +11.00%    18.7%
+paper_fav5_nocap      39   627.72    -25.53   -4.07%    29.4%
+paper_dog5_nocap      21   304.97    -43.84  -14.37%    59.4%
+paper_hour             6   199.50    -17.71   -8.87%    38.7%
+stale5                11    85.82     -1.88   -2.19%    35.3%
+maker_front            1    13.00     -7.92  -60.89%     7.9%
+```
+
+All retired. Section 105 makes the point these numbers cannot support: at 1 to
+39 settled markets, **none of these arms had the power to detect an edge smaller
+than the fee already removes.**
+
+### (3) What this round learned
+
+The daily strike ladder was checked in every dimension I know how to check —
+level, volatility, tails, strike arbitrage, calendar arbitrage, horizon bias,
+and finally **fit sensitivity**, which was the one that found something: my
+two-strike fit reads **4.26 points lower** than least-squares at every expiry,
+and the sign of `IV - RV` flips between them (-1.8 vs +3.3 points).
+
+**Nothing was overturned about the market.** What was overturned was the
+precision I had implied about my own measurement. Section 105 converts that into
+the useful form: the surface is unbiased to **±4.7 points at 18 days**, and
+separating a real variance premium needs **~100 days**.
+
+### (4) Adjustments: none
+
+No new arm, and none justified.
+
+- The surface is exhausted at the resolution available; more compute does not
+  help, only more calendar time does, and the series produces one event a day.
+- Every route through the 5-minute and hourly instruments is closed by direct
+  measurement.
+- The one measurement still in flight — 5-minute maker markout — exists to price
+  the rebate question section 92 raised and section 94 could not verify. It
+  completes on its own.
+
+**`observer` continues** for the section 42 re-test: 58 of 168 markets, roughly
+four more hours at 27/hour.
+
+### Samples, plainly
+
+`observer` 58 markets against a 168 target — **insufficient, and will remain so
+for about four hours.** Every arm in the table above is retired and none had
+enough markets to conclude anything on its own. **The conclusions in this project
+come from the historical datasets, not from the live arms**, and that has been
+true since section 105 made it explicit.
