@@ -6448,3 +6448,67 @@ effect.
 
 There is no trade in a discrepancy you cannot measure more precisely than your
 own calendar convention.
+
+---
+
+## 114. The closest thing to an edge in the whole project, and why it is not one
+
+Section 113 found Polymarket and the fed funds futures agreeing to a basis
+point. Checking whether that holds across days rather than at one instant — the
+discipline section 98 established — turns up something more interesting:
+
+```
+date        PM P(+25)   ZQU26    implied avg   futures P(hike)     gap
+2026-09-08      0.545  96.3025       3.6975%             0.579   +0.034
+2026-09-09      0.535  96.3000       3.7000%             0.600   +0.065
+2026-09-10      0.645  96.2875       3.7125%             0.707   +0.062
+2026-09-11      0.805  96.2700       3.7300%             0.857   +0.052
+```
+
+**The futures imply a higher hike probability than Polymarket on every day, by
+3.4 to 6.5 points**, while both series moved enormously (0.545 to 0.805). It is
+persistent, one-directional, and not a snapshot.
+
+At the Sep 11 prices that is a trade: buy `+25 bps` at the 0.79 ask against a
+futures-implied 0.850, a 6.0¢ edge; the fee is 0.83¢ and the 25% rebate returns
+0.21¢, for **+5.4¢ on a 79¢ stake — 6.8% over four days.**
+
+### Why I am not taking it
+
+**The gap is 0.4 to 0.8 basis points of interest rate.**
+
+```
+09-08: futures 3.6975%  vs  PM-implied 3.6936%   gap +0.39 bp
+09-09: futures 3.7000%  vs  PM-implied 3.6924%   gap +0.76 bp
+09-10: futures 3.7125%  vs  PM-implied 3.7052%   gap +0.72 bp
+09-11: futures 3.7300%  vs  PM-implied 3.7239%   gap +0.61 bp
+```
+
+Sub-basis-point. And three modelling choices each move the answer by more:
+
+- **Day count.** I used 16/14 (decision effective the day after a Sep 16
+  meeting). The day count that closes the gap is **14.3 to 15.1** — within one
+  day of mine, and *one day is worth about five probability points.*
+- **EFFR pass-through.** I assumed the effective rate moves the full 25 bp with
+  the target. It sits 0.5 bp above the current midpoint; if pass-through is 23 bp
+  rather than 25, most of the gap goes.
+- **Non-simultaneity.** The CBOT close is 20:59 UTC; Polymarket trades through
+  the night. The prices are four hours apart.
+
+**A persistent five-point disagreement that is entirely inside a one-day
+calendar ambiguity is not an edge. It is the resolution limit of my own
+comparison**, and section 113 said exactly that before this data existed — "there
+is no trade in a discrepancy you cannot measure more precisely than your own
+calendar convention."
+
+### What would settle it
+
+Not more days — the gap is stable, so more days sharpen nothing. It needs the
+**Fed's own implementation note** specifying the effective date, and a
+simultaneous futures quote rather than a settlement price. Both are obtainable;
+neither is obtainable from here tonight.
+
+That makes this the second open question in the file (with section 109's, now
+closed) that is limited by **a specific missing document rather than by method
+or sample size** — and the first one where resolving it would actually change a
+decision.
