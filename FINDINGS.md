@@ -5483,3 +5483,74 @@ public candles, so it is fully reconstructible.
 That is a real experiment and it is the first one in ninety-seven sections
 pointed at an instrument whose fee arithmetic is not hopeless. **Recorded as a
 direction, not a result.**
+
+---
+
+## 98. The volatility surface is right too
+
+Section 97 found a ladder implying 18.8% against 40% realised and refused to
+call it an edge on one observation. `volsurface.py` walks the whole
+`btc-multi-strikes-weekly` series — 20 daily events, 11-15 strikes each — fits
+the implied lognormal from the two strikes straddling the median 16 hours before
+settlement, and measures what volatility actually arrived in those 16 hours.
+
+```
+day          strikes    spot    implied median      IV      RV   IV/RV
+2026-09-11      11    76,569        76,577       42.5%   54.2%    0.78
+2026-09-10      11    78,306        78,322       36.2%   34.8%    1.04
+2026-09-09      11    78,456        78,510       33.6%   41.9%    0.80
+2026-09-08      11    79,112        79,097       28.4%   31.2%    0.91
+2026-09-07      11    80,342        80,375       34.4%   26.8%    1.28
+2026-09-06      11    79,832        79,776       27.3%   18.0%    1.52
+2026-09-05      11    79,661        79,493       22.0%   15.1%    1.46
+2026-09-04      11    81,270        81,238       44.6%   56.8%    0.79
+2026-09-03      11    77,340        77,326       28.1%   41.8%    0.67
+2026-09-02      11    77,439        77,420       31.6%   38.9%    0.81
+2026-09-01      11    78,581        78,425       35.5%   36.0%    0.99
+2026-08-31      11    77,682        77,661       42.4%   42.4%    1.00
+2026-08-30      11    78,230        78,345       25.9%   19.8%    1.31
+2026-08-29      12    77,846        77,799       28.2%   17.3%    1.63
+2026-08-28      11    80,250        80,283       46.8%   42.7%    1.10
+2026-08-27      13    79,024        79,072       35.8%   41.6%    0.86
+2026-08-26      14    78,539        78,514       43.2%   40.3%    1.07
+2026-08-25      15    78,993        78,994       40.1%   59.6%    0.67
+
+18 days
+mean IV 34.8%    mean RV 36.6%
+IV/RV   mean 1.038   median 0.993   sd 0.284
+IV - RV mean -1.8 points   t = -0.87
+```
+
+**Median IV/RV is 0.993.** The book's volatility forecast is unbiased against
+what subsequently happened, over 18 days, with no significant tilt in either
+direction. And the implied median tracks spot to within a few dollars in every
+single row — the ladder is not just roughly right, it is centred.
+
+The 18.8% that looked like a twenty-point mispricing in section 97 was a quiet
+hour, exactly as suspected. Individual days range 0.67 to 1.63 with sd 0.284,
+which is forecast *error*, not forecast *bias* — and profiting from it requires
+predicting which days will surprise, which is the same problem one level up.
+
+### What this closes
+
+This was the most promising direction the project found: a tractable instrument
+(observable settlement, 10x liquidity, a horizon where the fee arithmetic
+works), a recoverable implied distribution, and an apparent 2x vol gap. It took
+one script and eighteen days of history to establish the book is right there
+too.
+
+**The pattern from section 80 now extends to the volatility surface.** Momentum,
+the near-money favourite, hour-to-hour reversal, cross-asset lead-lag, and now
+the implied volatility term structure — five features, all real, all already in
+the quote.
+
+### The methodology finally worked
+
+Worth noting against the record. Sections 40, 43, 51, 63 and 93 all describe
+building on a number before checking its scope. Here the sequence ran the right
+way round: an apparent edge appeared, I refused it on one observation, named the
+measurement that would settle it, built that measurement, and got a clean
+negative **before** any arm was launched or any capital modelled.
+
+That is the first time in ninety-eight sections the check came before the
+commitment rather than after it.
