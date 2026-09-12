@@ -63,6 +63,31 @@ def klines(start_ms, end_ms):
     return out
 
 
+def fit_ls(pairs):
+    """Least-squares fit of iPhi(p) on log K across every usable strike.
+
+    Section 103: the two-strike fit reads 4.26 points lower than this at every
+    expiry, because the wings imply more volatility than the centre and only
+    this method sees them.  Kept side by side so the choice is visible in the
+    output rather than buried in the method.
+    """
+    us = [(k, p) for k, p in pairs if 0.02 < p < 0.98]
+    if len(us) < 3:
+        return None
+    xs = [math.log(k) for k, _ in us]
+    ys = [iPhi(p) for _, p in us]
+    n = len(xs)
+    mx, my = sum(xs) / n, sum(ys) / n
+    den = sum((x - mx) ** 2 for x in xs)
+    if den <= 0:
+        return None
+    b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / den
+    if b >= 0:
+        return None
+    sig = -1.0 / b
+    return math.exp((my - b * mx) * sig), sig
+
+
 def fit_ladder(pairs):
     """pairs: [(strike, prob_above)] -> (median, sigma_over_tau) by least squares.
 
@@ -131,6 +156,8 @@ def main(lead_h=16.0, limit=20):
             continue
         med, sig = fit
         iv = sig / math.sqrt(lead_h * 3600 / YR)
+        fls = fit_ls(pairs)
+        iv_ls = fls[1] / math.sqrt(lead_h * 3600 / YR) if fls else None
         kl = klines((t_obs - 60) * 1000, t_end * 1000)
         if len(kl) < 60:
             print(f"  {end[:10]}  no klines")
@@ -139,7 +166,8 @@ def main(lead_h=16.0, limit=20):
         rv = st.pstdev(r) * math.sqrt(YR / 60.0)
         spot0 = kl[0][1]
         rows.append(dict(day=end[:10], strikes=len(pairs), median=med, spot=spot0,
-                         iv=iv, rv=rv, ratio=iv / rv if rv else None))
+                         iv=iv, iv_ls=iv_ls, rv=rv,
+                         ratio=iv / rv if rv else None))
         print(f"  {end[:10]}  {len(pairs):>2} strikes  spot {spot0:>9,.0f}"
               f"  implied median {med:>9,.0f}  IV {iv*100:>5.1f}%"
               f"  RV {rv*100:>5.1f}%  IV/RV {iv/rv:>5.2f}")
@@ -176,7 +204,14 @@ def main(lead_h=16.0, limit=20):
         d = [r["iv"] - r["rv"] for r in rows]
         sd = st.stdev(d) if len(d) > 1 else 0.0
         t = st.mean(d) / (sd / math.sqrt(len(d))) if sd else 0.0
-        print(f"  IV - RV  mean {st.mean(d)*100:+.1f} points  t={t:+.2f}")
+        print(f"  IV - RV  mean {st.mean(d)*100:+.1f} points  t={t:+.2f}   [2-strike fit]")
+        ls = [(r["iv_ls"], r["rv"]) for r in rows if r.get("iv_ls")]
+        if len(ls) >= 4:
+            dl = [a - b for a, b in ls]
+            sdl = st.stdev(dl) if len(dl) > 1 else 0.0
+            tl = st.mean(dl) / (sdl / math.sqrt(len(dl))) if sdl else 0.0
+            print(f"  IV - RV  mean {st.mean(dl)*100:+.1f} points  t={tl:+.2f}"
+                  f"   [least-squares fit, n={len(ls)}]")
         print(f"\n  IV/RV < 1 means the book underprices volatility -- buy the wings.")
     json.dump(rows, open("volsurface.json", "w"))
 

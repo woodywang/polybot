@@ -5848,3 +5848,50 @@ only way to find it is to ask what else the same data would have said under a
 different reasonable choice — which is the question I did not ask for
 ninety-eight sections and asked here only because the surface had stopped
 producing anything else to test.
+
+---
+
+## 104. Both fits, measured, and the sign depends on which one you believe
+
+Section 103 estimated what a least-squares fit would do to the section 98
+result. `volsurface.py` now computes both side by side rather than leaving it as
+an inference:
+
+```
+IV - RV   mean -1.8 points   t = -0.87    [2-strike / ATM,       n=18]
+IV - RV   mean +3.3 points   t = +1.61    [least-squares/smile,  n=13]
+```
+
+**The sign flips.** The ATM fit says the book slightly *underprices* volatility;
+the smile-weighted fit says it slightly *overprices* it. Neither is significant,
+and the estimate in section 103 (+2.5) was close to the measured +3.3.
+
+The n differs because least-squares needs three usable strikes and several days
+offered only two — which is itself a limitation worth naming: on the quietest
+days the ladder collapses to a single informative pair, and the method that sees
+the smile cannot run at all.
+
+### The honest form of the result
+
+Not "IV/RV median 0.993". That number is real but reads as a precision this
+instrument does not have. The defensible statement is:
+
+> **The volatility surface is unbiased to within about five points, which is the
+> resolution my fit can achieve. Whether it is one point rich or three points
+> cheap depends on a modelling choice I cannot resolve from the data.**
+
+Which is, incidentally, the normal state of affairs in volatility. A smile-
+weighted implied vol sitting a few points above realised is the variance risk
+premium — options are usually slightly expensive, because someone is being paid
+to carry gamma. The least-squares figure of +3.3 points is exactly what a
+functioning derivatives market looks like.
+
+### What this leaves for the surface
+
+Nothing further I know how to test. Across sections 97-104 the ladder has been
+checked for level, volatility, tails, strike arbitrage, calendar arbitrage,
+horizon bias, and fit sensitivity. It passes all of them, and the one dimension
+where it does not pass cleanly is my own measurement precision.
+
+**A market you cannot prove wrong at the resolution of your own instruments is a
+market you should not trade against.**
