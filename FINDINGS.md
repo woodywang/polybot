@@ -6576,3 +6576,75 @@ That is not an inefficiency. It is a basis, and it is the same shape as section
 not the same reference, and the gap between references swamps the gap between
 prices.** Ninety sections apart, on completely different instruments, the same
 thing ends the trade.
+
+---
+
+## 116. Polymarket versus Deribit: the comparison a real options market allows
+
+Section 115 ended on a structural point — two venues settling on different
+references cannot be compared more precisely than the basis between them. The
+BTC daily ladder has **no such problem**: section 87 verified its settlement at
+0.00% disagreement over 1,581 markets. So it can be compared against a real
+options market, and Deribit trades BTC options with daily expiries.
+
+```
+BTC index (Deribit) 77,299     Binance 77,284      950 live options, 12 expiries
+```
+
+### Quote quality first
+
+Section 103's lesson applied before the comparison, not after:
+
+```
+expiry        strike type  mark IV     bid      ask     OI   volume
+09-12 08:00   76,000   C    34.6%    0.014   0.0185      0      0.0
+09-12 08:00   76,000   P    34.6%   0.0001   0.0003    201    246.8
+09-12 08:00   78,000   C    21.0%   0.0001   0.0003    671    440.9
+09-12 08:00   78,000   P    21.0%   0.0075    0.011    165     35.6
+09-13 08:00   76,000   C    19.1%    0.015   0.0195      0      0.0
+```
+
+**The 76k call has zero open interest and zero volume.** Its 34.6% mark IV — and
+the 19.1% at the next expiry, a fifteen-point swing for one day — is a model
+output, not a price. That strike is unusable, and taking those marks at face
+value would have produced a large fictitious edge.
+
+The 78k **put** is genuinely traded (OI 165, volume 35.6), so that strike is
+comparable.
+
+### The comparison, and what decides it
+
+Polymarket's ladder expires **16:00 UTC**; Deribit's expiries are **08:00 UTC**.
+So the Polymarket expiry falls between Deribit's 7-hour and 31-hour contracts,
+whose IVs are 21.0% and 16.6%:
+
+```
+          IV used        P(S > 78k) at 15h
+21.0%  (7h anchor)              0.1494
+19.5%  (interpolated)           0.1316
+16.6%  (31h anchor)             0.0944
+
+Polymarket 78k:  bid 0.080   ask 0.090
+```
+
+**The gap is 1.6 to 5.9 points depending entirely on how I interpolate**, and the
+interpolation crosses an 08:00 → 16:00 boundary where the intraday volatility
+pattern changes — Asian session into US session. There is no defensible single
+number.
+
+At the favourable end this is a 40% return over fifteen hours, which is exactly
+the signature of a measurement artifact, and at the unfavourable end it is inside
+the fee.
+
+### What this instrument actually shows
+
+The comparison is **the best-founded one in the project**: a clean settlement
+reference on both sides, a liquid external market, matching strikes, and quote
+quality verified before use rather than assumed. And it still cannot resolve
+below a 4-point band, because Deribit's expiry grid does not line up with
+Polymarket's and short-dated crypto volatility is strongly intraday.
+
+Twelve instances now of the same ending. **Not once has the obstacle been that
+the market was efficient in some abstract sense — every single time it has been
+that the thing I needed to measure was smaller than the resolution of the
+instrument available to measure it.**
