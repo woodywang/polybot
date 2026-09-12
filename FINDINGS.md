@@ -5669,3 +5669,61 @@ error in what it implies.**
 That is the last question I know how to ask of this instrument without an
 information advantage about Bitcoin itself — which is a different project, and
 not one a harness that reads public order books can help with.
+
+---
+
+## 101. The term structure prices mean reversion, which answers section 97
+
+The series runs **seven expiries at once** — each contract opens a week before it
+settles — so there is a full surface across strike *and* time. Fitting each
+ladder independently:
+
+```
+expiry       days   implied med   sigma(tau)   annualised   total variance
+2026-09-12    0.7      77,168        0.78%       18.5%           0.61
+2026-09-13    1.7      77,296        1.28%       19.1%           1.65
+2026-09-14    2.7      77,308        2.03%       23.8%           4.11
+2026-09-15    3.7      77,273        2.71%       27.1%           7.35
+2026-09-16    4.7      77,305        3.53%       31.3%          12.49
+2026-09-17    5.7      77,283        4.06%       32.6%          16.47
+2026-09-18    6.7      77,307        4.42%       32.8%          19.57
+
+spot 77,292      calendar violations: 0
+```
+
+Three things, each of which could have been wrong and none of which is.
+
+**No calendar arbitrage.** Total variance rises strictly with maturity. A single
+inversion would be a risk-free calendar spread; there are none across seven
+expiries, fitted independently from seven separate ladders.
+
+**The forward is flat.** Every implied median lands within $140 of spot — 77,168
+to 77,308 against 77,292. For a zero-carry asset that is exactly right, and it
+is not imposed by the fit; each expiry's median comes from its own two strikes.
+
+**The term structure slopes up, from 18.5% to 32.8%.**
+
+### That is the answer to section 97
+
+Section 97 saw 18.8% implied against 40% 30-day realised, noted BTC had gone
+quiet in the last hour (11.1%), and asked the open question:
+
+> does 16 hours revert toward the longer-run mean faster than the book assumes?
+
+**The book assumes reversion and has priced it.** It is not naively anchoring on
+the quiet hour — it quotes 18.5% for tomorrow and 32.8% for next week,
+converging toward the 40% long-run figure exactly as a mean-reverting volatility
+model would. The "mispricing" was me reading a single point off a curve that was
+correctly shaped the whole time.
+
+### What kind of market this is
+
+Seven expiries, eleven strikes each, arbitrage-free in strike, arbitrage-free in
+time, a flat forward, an unbiased volatility forecast (§98), calibrated tails
+(§99), and a term structure encoding mean reversion. **This is a functioning
+derivatives market**, not a prediction-market curiosity, and it is priced by
+participants who are doing the same work I am doing — only earlier and with
+better infrastructure.
+
+Which is the answer to the whole project, stated one last way: **there is no
+edge here because there is no mistake here.**
