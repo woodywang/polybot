@@ -6012,3 +6012,68 @@ for about four hours.** Every arm in the table above is retired and none had
 enough markets to conclude anything on its own. **The conclusions in this project
 come from the historical datasets, not from the live arms**, and that has been
 true since section 105 made it explicit.
+
+---
+
+## 107. The rebate question, answered: it would need to be nine times the fee
+
+Section 92 found `makerRebatesFeeShareBps = 10000` on 5-minute markets and
+rebuilt the maker arithmetic around it. Section 94 could not verify from any
+public endpoint that it pays. Section 92 also noted the useful thing: the
+missing number was **5-minute maker markout**, never measured, and independent
+of whether the rebate is real.
+
+`makercheck.py` in 5-minute mode, 40 minutes:
+
+```
+77 posts, 34 filled (44.2%)
+  size ahead at post   median 75 sh
+  capture at post      median +0.50c   mean +0.70c
+  markout   30s   n=28  mean -14.04c   median -13.00c   t=-3.95
+  markout  120s   n=14  mean  -9.21c   median -12.50c   t=-1.02
+```
+
+Full accounting, granting the rebate at its most generous possible reading:
+
+```
+capture (half-spread)               +0.70c
+fee-share rebate (100%, if paid)    +1.47c
+                                    -------
+gross                               +2.17c
+markout at 30s                     -14.04c
+                                    -------
+NET                                -11.87c per fill
+```
+
+**Break-even would need a rebate of 13.34c a share. The entire taker fee at
+these prices is 1.47c.** The rebate would have to be **9.1 times the whole fee**
+— not 100% of it, 910% of it. Whether the field pays or not is therefore
+irrelevant, which is exactly what section 94 hoped the measurement would
+establish.
+
+### And the fill rate is the trap
+
+**44.2% filled here against 7.7% on hourly** (§57). The 5-minute book turns over
+six times faster, so a resting order gets hit constantly — and every fill is
+worse than the hourly ones were. The instrument that looked more forgiving
+because the rebate made the gross bigger is in fact the one that hands you the
+loss most often.
+
+t = -3.95 on 28 fills, against the hourly measurement's t = -2.40 on 7. This is
+the best-powered markout measurement in the project and it is the most negative.
+
+### What it closes
+
+```
+maker configuration                      capture   markout    net
+5-min, at the touch, with 100% rebate     +2.17c   -14.04c  -11.87c
+hourly, at the touch (§57)                +1.00c   -15.00c  -14.00c
+hourly, one tick up, spread >= 3c (§76)   +1.30c    -7.50c   -6.20c
+hourly, one tick up, 1c spread (§63)      -0.50c        --   negative on entry
+```
+
+**Every maker configuration on every instrument, measured directly.** The
+rebate — the one genuinely new input since section 57 — moves the 5-minute case
+from -14.04c to -11.87c and changes nothing.
+
+That closes the last open thread from the question that opened it.
