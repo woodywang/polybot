@@ -6958,3 +6958,59 @@ Section 111 named the rule for this — *a test with more knobs than observation
 will always agree with whatever it is testing.* This is the same thing wearing
 a different hat: **a model too crude for the instrument will always find the
 instrument mispriced, in the direction of its own crudeness.**
+
+---
+
+## 122. Two defensible methods, opposite signs, on the same data
+
+Section 121 said a smile-consistent barrier price was beyond what I could build
+here, and left the apparent 4-10 point cheapness unresolved. That was another
+assertion worth testing. There is a near-model-free route: for a driftless
+process the reflection principle gives `P(touch B) = 2 x P(S_T >= B)`, and the
+**terminal digital is directly readable from Deribit's call spread** —
+`P(S_T >= K) = -dC/dK` — with no volatility model at all. Deribit quotes 74
+strikes on the 09-25 ETH expiry, so the derivative is well resolved.
+
+Interpolating between the two Deribit expiries that bracket Polymarket's window:
+
+```
+    K  dir      PM   2xP @13.29d   2xP @20.29d   interp @19.12d   PM - deribit
+ 2700   up   0.475        0.3821        0.4290           0.4212         +5.4 pts
+ 2800   up   0.305        0.2061        0.3067           0.2900         +1.5 pts
+ 2900   up   0.205        0.1006        0.1936           0.1781         +2.7 pts
+```
+
+**Polymarket is richer, at every barrier.**
+
+Section 121, using a flat-volatility barrier fit against Deribit's same-strike
+implied vols, found Polymarket **4 to 10 points cheap**. This method, using
+Deribit's own smile through the call spread, finds it **1.5 to 5.4 points rich**.
+
+```
+method                                      verdict            magnitude
+flat-vol barrier fit vs same-strike IV      PM cheap           4-10 points
+reflection on Deribit's call-spread digital PM rich            1.5-5.4 points
+```
+
+**Same instrument, same prices, same afternoon, opposite conclusions.**
+
+### Why this is the most useful result in the file
+
+Neither method is wrong in any obvious way. Reflection is exact for driftless
+arithmetic Brownian motion and approximate under the risk-neutral log-drift of
+`-sigma^2/2`; the flat-vol fit is exact under a lognormal with no smile, which is
+not the world. The 20.29-day expiry carries only 16 call marks against the
+09-25's 74, so half the interpolation rests on a coarse grid. Each objection is
+worth a few points — and a few points is the entire signal.
+
+Every prior section reached "no edge" by measuring something and finding it
+small. **This one reaches it differently: by measuring the same thing two
+defensible ways and getting answers that do not agree in sign.** When the spread
+across reasonable methods exceeds the effect, the effect has not been measured
+at all — it has been chosen.
+
+Section 111 said a test with more knobs than observations always agrees with
+itself. Section 121 said a model too crude for the instrument always finds the
+instrument mispriced in the direction of its crudeness. **This is the third and
+sharpest form: when two models of comparable crudeness disagree in sign, the
+honest report is the disagreement, not either number.**
