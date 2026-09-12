@@ -5096,7 +5096,11 @@ waiting to be made.
 
 ---
 
-## 92. There is a maker rebate, on the instrument I stopped testing
+## 92. There is a maker rebate FIELD, on the instrument I stopped testing
+
+> **Over-claimed — see section 94.** The field is real and instrument-specific.
+> That it *pays* was my inference from its name, and the CLOB's own endpoints do
+> not confirm it.
 
 Section 53 checked `clobRewards` for a liquidity-rewards pool, found it absent on
 crypto markets, and concluded a maker here "earns the spread and only the
@@ -5217,3 +5221,64 @@ Cheap pairs, "ask > 0.5", dwell-time selection, five fills sharing a spread, and
 now one asset's lag read as a constant. **Every one was a correct measurement of
 a narrower thing than I described.** The arithmetic has never been the problem;
 the scope of the claim has, every time.
+
+---
+
+## 94. I asserted a rebate from a field name. Checking took four minutes.
+
+Section 92 found `makerRebatesFeeShareBps = 10000` on 5-minute crypto markets
+and absent on hourly ones, read 10000bps as 100%, and rebuilt the maker
+arithmetic around a full taker-fee share. **The field is real. That it pays
+anything is an inference I did not check before writing it down.**
+
+Checking now, against the CLOB rather than gamma:
+
+```
+gamma  /markets?slug=...        makerRebatesFeeShareBps = 10000
+                                feeSchedule = {rate: 0.07, takerOnly: true, rebateRate: 0.2}
+
+CLOB   /markets/{conditionId}   rewards = {"rates": null, "min_size": 50, "max_spread": 4.5}
+CLOB   /rewards/markets/{cid}   {"data": [], "count": 0}
+data   /trades?market={cid}     no fee or rebate fields at all
+```
+
+**`rates: null`, and the rewards listing is empty.** The CLOB is what actually
+matches and pays; gamma is a metadata layer.
+
+### What this does and does not establish
+
+It does **not** prove there is no maker rebate. `rewards` in the CLOB is the
+*liquidity-rewards pool* — the same `min_size 50 / max_spread 4.5` fields section
+53 checked — and a per-trade share of the taker's fee is a different mechanism
+that would not appear there. `rates: null` rules out the pool, not the fee share.
+
+What it establishes is that **I cannot verify the payout from any public
+endpoint**, and section 92 wrote as though I had. The honest status:
+
+- the field exists, and differs between the two instruments — **verified**
+- 10000 bps means 100% of something — **plausible reading of the name**
+- that something is the taker fee, and it is actually paid — **unverified**
+
+### What it changes about the measurement in flight
+
+Nothing, and that is the useful part. `makercheck` is measuring **markout on
+5-minute markets**, which was never measured and does not depend on the rebate
+at all. Once it lands, the rebate becomes a single sensitivity parameter rather
+than an assumption:
+
+```
+maker net = half-spread (0.50c) + rebate (0 to 1.75c) - markout (measuring)
+```
+
+If the markout is worse than 2.25c the instrument is closed at any rebate, and
+the question dies without ever needing to be resolved. If it is better, the
+break-even rebate is a number I can state, and *then* it is worth finding out
+what the field really pays.
+
+### Sixth instance, and the first one caught fast
+
+Cheap pairs, `ask > 0.5`, dwell-time selection, five fills sharing a spread, one
+asset's lag as a constant — and now a field name read as a payment. The
+difference this time is that it took **four minutes** between writing the claim
+and testing it, instead of fifty sections. The prompt to check came from
+outside; the check itself was three HTTP requests I could have made first.
