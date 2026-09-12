@@ -5727,3 +5727,65 @@ better infrastructure.
 
 Which is the answer to the whole project, stated one last way: **there is no
 edge here because there is no mistake here.**
+
+---
+
+## 102. The whole curve is unbiased, and the one result that looked significant is not
+
+Section 98 tested the ladder at a 16-hour lead. Section 101 showed the term
+structure is arbitrage-free, which is not the same as unbiased — an
+internally consistent curve can still be systematically wrong. Running the same
+implied-versus-realised test at three horizons:
+
+```
+lead     days   mean IV   mean RV   IV - RV      raw t
+ 16h       18     34.8%     36.6%   -1.8 pts     -0.87
+ 48h       18     35.7%     35.5%   +0.2 pts     +0.10
+ 96h       20     34.9%     39.2%   -4.3 pts     -2.07
+```
+
+The 96-hour row crosses |t| = 2, says the book **underprices** volatility by 4.3
+points at a four-day horizon, and points at a specific trade: buy the wings.
+
+**It is not significant.** The events are daily, so each window starts 24 hours
+after the last — but the window is `lead` hours long, so consecutive windows
+share most of their data:
+
+```
+lead    overlap   n_eff   raw t   corrected t
+ 16h        0%     18.0   -0.87       -0.87
+ 48h       50%      9.0   +0.10       +0.07
+ 96h       75%      5.0   -2.07       -1.03
+```
+
+At a 96-hour lead, twenty days of measurements contain **five independent
+observations**. The t-statistic halves and the result disappears.
+
+This is the same correction as section 43 — where clustering btc, eth and sol as
+three markets instead of one window inflated a t from +4.00 to +2.48 — in the
+time dimension rather than the cross-section. **Overlapping windows are
+correlated observations wearing separate dates.**
+
+### The honest summary of the instrument
+
+```
+                     16h        48h        96h
+IV - RV           -1.8 pts   +0.2 pts   -4.3 pts
+corrected t         -0.87      +0.07      -1.03
+```
+
+**Unbiased at every horizon tested**, once the samples are counted correctly.
+Combined with sections 99 through 101 — calibrated tails, no strike arbitrage,
+no calendar arbitrage, a flat forward — the daily BTC ladder is a correctly
+priced derivatives surface in every dimension this project can measure.
+
+### Seventh instance, caught in one step
+
+Cheap pairs, `ask > 0.5`, dwell time, five fills sharing a spread, one asset's
+lag, a field name read as a payment, and now overlapping windows read as
+independent days. **The gap between making the error and catching it has gone
+from fifty sections to four minutes to, here, a single command** — the raw t
+printed and the correction was the next thing computed, before the number was
+written down as a finding.
+
+That is the only thing in this project that has actually improved.
