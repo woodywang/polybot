@@ -5408,3 +5408,78 @@ settlement mechanism's own resolution.
 That was computable on day one from two numbers: the fee formula and the basis
 volatility. It took ninety-six sections and a question about rebates to put them
 next to each other.
+
+---
+
+## 97. A more tractable instrument, and a mispricing I cannot yet call one
+
+Section 96 said the daily horizon is where the fee arithmetic stops being
+absurd. Polymarket runs exactly that instrument, and I had never looked at it.
+
+```
+Will the price of Bitcoin be above $78,000 on September 12?
+resolves on:  the Binance 1-minute candle for BTC/USDT at 12:00 ET
+liquidity:    $32,776      (vs $3,525 on a 5-minute market)
+spread:       2c           tick 1c      min size 5 shares
+```
+
+**It settles on a Binance candle** — the same object section 87 verified at 0.00%
+disagreement over 1,581 markets. No Chainlink, no TWAP, no 5.05 bps of
+settlement ambiguity (§61). The payoff is exactly observable, the horizon is a
+day rather than five minutes, and the book is ten times deeper.
+
+And there is a **strike ladder**, which means the implied distribution is
+recoverable:
+
+```
+strike      bid     ask    liquidity        spot $77,282
+70,000    0.999    1.00      42,416
+74,000    0.993   0.994      36,719
+76,000    0.970   0.975      45,809
+78,000    0.080   0.090      32,776
+80,000    0.008   0.009      37,118
+```
+
+Verified against the live CLOB, not gamma's cache: 8,446 shares bid at 0.08 on
+the 78k strike, 5,000 offered at 0.975 on the 76k. Real, deep, two-sided.
+
+Solving the 76k/78k pair for a lognormal gives **implied median $77,151 against
+a spot of $77,282, and sigma = 18.8% annualised.**
+
+### Why I am not calling it an edge
+
+30-day realised vol is **40.0%**, and stable at every sampling interval from 1
+minute to 1 day, so it is not microstructure noise. At 40% the fair value of the
+78k strike is **0.293** against an ask of **0.09** — a twenty-point edge, which
+after today is prima facie evidence that I have made a mistake.
+
+Fresh data narrows it sharply:
+
+```
+realised  1h    11.1%       book implies 18.8%
+          3h    25.7%
+          6h    27.5%
+         12h    64.5%
+         30d    40.0%
+```
+
+**BTC has gone quiet in the last one to three hours**, and the book's 18.8% sits
+right inside that range. It is pricing the current regime, not the 30-day
+average — which is what a competent volatility model does.
+
+So the question is not "is the book wrong" but "**does 16 hours revert toward the
+longer-run mean faster than the book assumes**". Volatility clusters, so anchoring
+on the recent hour is defensible; it also mean-reverts, so anchoring on it for
+sixteen hours may not be.
+
+### What would settle it
+
+One market at one instant proves nothing — that is the section 93 error
+(one asset's lag read as a constant) waiting to happen again. The measurement is
+**implied vol from the strike ladder against subsequently realised vol, across
+many of these markets over weeks**. They have `prices-history` and they settle on
+public candles, so it is fully reconstructible.
+
+That is a real experiment and it is the first one in ninety-seven sections
+pointed at an instrument whose fee arithmetic is not hopeless. **Recorded as a
+direction, not a result.**
