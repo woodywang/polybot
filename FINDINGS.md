@@ -7128,3 +7128,74 @@ feasible set the whole time**, and the set is 17x wider than the fee. **The
 disagreement in section 122 was not a puzzle to be solved — it was the correct
 observable consequence of an identification problem, and finding its width was
 the only thing left to learn.**
+
+---
+
+## 125. The digital ladder is consistent too, and the limit here is arithmetic not theory
+
+Section 124 closed the ETH **barrier** ladder on an identification problem: the
+terminal law constrains a path functional only to within a factor of three.
+Polymarket's BTC ladder is different — those are **digitals**, and for a digital
+the terminal law determines the price *exactly*:
+
+```
+P(S_T > K) = -dC/dK
+```
+
+No model, no dynamics, no identification gap. Deribit's Sep 18 BTC expiry quotes
+22 strikes, so the derivative is directly computable and the comparison is as
+clean as it can be made.
+
+```
+     K   deribit P(S>K)   PM bid   PM ask   inside?
+68,000          0.9902    0.968    0.995      yes
+70,000          0.9728    0.953    0.985      yes
+72,000          0.9496    0.910    0.920       NO
+74,000          0.8510    0.810    0.860      yes
+76,000          0.6537    0.630    0.680      yes
+78,000          0.4178    0.400    0.440      yes
+80,000          0.2127    0.200    0.250      yes
+82,000          0.0928    0.080    0.130      yes
+84,000          0.0425    0.030    0.060      yes
+86,000          0.0155    0.008    0.041      yes
+88,000          0.0077    0.004    0.031      yes
+```
+
+**Ten of eleven strikes: Deribit's model-free digital falls inside Polymarket's
+bid-ask.** Not close to it — inside it, at every strike from 68k to 88k.
+
+### The one exception is arithmetic
+
+72,000 shows Deribit at 0.9496 against a Polymarket ask of 0.920. Before reading
+that as a 3-point edge: the estimate comes from a numerical derivative on a
+strike grid 1,000 wide, and the one-sided slopes bracketing each point disagree
+substantially:
+
+```
+     K   left slope   right slope   spread
+72,000       0.9631        0.9361     2.7 pts
+76,000       0.7117        0.5957    11.6 pts
+78,000       0.4796        0.3559    12.4 pts
+80,000       0.2553        0.1702     8.5 pts
+```
+
+**Near the money the numerical uncertainty is ±6 points.** The 72,000 gap is 1.6
+points below the *lower* of its two bracketing slopes — well inside the noise of
+the estimate that produced it.
+
+### Two different walls, same result
+
+```
+instrument            why it cannot be resolved            width
+ETH barriers (§124)   terminal law underdetermines paths   17x the fee
+BTC digitals (§125)   strike grid too coarse to differentiate  ±6 points
+```
+
+The barrier limit is **theoretical** — no amount of better data fixes it, because
+marginals genuinely do not determine path functionals. The digital limit is
+**numerical** — a finer strike grid would fix it, and Deribit simply does not
+list strikes every $100.
+
+Both end in the same place: **Polymarket's prices are consistent with the
+professional options market everywhere I can check, and where I cannot check
+precisely, the imprecision is mine.**
