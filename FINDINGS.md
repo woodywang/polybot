@@ -7014,3 +7014,64 @@ itself. Section 121 said a model too crude for the instrument always finds the
 instrument mispriced in the direction of its crudeness. **This is the third and
 sharpest form: when two models of comparable crudeness disagree in sign, the
 honest report is the disagreement, not either number.**
+
+---
+
+## 123. The bounds, and why the two methods could disagree
+
+Section 122 found two defensible methods giving opposite signs and stopped
+there. There is a rigorous way past it: rather than choose a model, compute the
+bounds that **every** model consistent with Deribit's terminal prices must obey.
+
+For a continuous martingale with terminal law `mu`, the touch probability is
+bounded by:
+
+```
+lower:  P(S_T >= B)                      finishing above implies having touched
+upper:  inf_(K<B)  C(K) / (B - K)        Azema-Yor / Hobson
+```
+
+Both are functions of call prices alone — no volatility, no dynamics. Deribit
+quotes 74 strikes on the 09-25 ETH expiry and 16 on 10-02.
+
+```
+expiry        days   marks       B    lower    upper   PM mid
+2026-09-25   13.28      74    2700   0.1885   0.5027    0.475   inside
+                              2800   0.1031   0.2941    0.305   OUTSIDE
+                              2900   0.0503   0.1672    0.205   OUTSIDE
+2026-10-02   20.28      16    2700   0.2145   0.6073    0.475   inside
+                              2800   0.1533   0.4042    0.305   inside
+                              2900   0.0968   0.2577    0.205   inside
+```
+
+The 13.28-day violations are **not violations**: Polymarket's window runs 19.12
+days, and a longer horizon admits a higher touch probability. The bound that
+applies is the one computed at a horizon **at least as long** as Polymarket's —
+the 20.28-day expiry — and **every barrier sits inside it.**
+
+**There is no model-free arbitrage.** Polymarket's barrier prices are consistent
+with Deribit's terminal distribution under some martingale.
+
+### And this explains section 122 exactly
+
+Look at the width. At B = 2700 the bound is **[0.2145, 0.6073]** — a
+**thirty-nine point** interval. The terminal distribution simply does not
+determine a barrier price; it constrains it to a range wider than the entire
+question being asked.
+
+Section 121's flat-vol method and section 122's reflection method both produce
+answers inside that interval, as does Polymarket's 0.475. **They disagreed in
+sign because there was nothing in the data to make them agree.** Two methods
+picking different points from a 39-point feasible set will differ by whatever
+they differ by, and neither is measuring the market.
+
+That is the complete resolution: **not "one method was wrong", but "the
+identification problem is real and its width is 39 points."**
+
+### Caveat kept
+
+Deribit's ETH options are coin-margined, so the natural martingale measure has
+ETH as numeraire rather than USD. The bounds above treat the USD price as a
+martingale, which introduces a convexity correction I have not applied. It is
+small at these horizons relative to a 39-point interval — but it is another
+reason the interval should be read as approximate, not exact.
