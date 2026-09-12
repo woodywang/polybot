@@ -5346,3 +5346,65 @@ at the start instead of discovered at section 95. **The fee schedule is the
 first thing to look at on this platform and it varies 2.5x; I looked at it on
 day one only far enough to verify the 7% formula, and never asked whether 7% was
 universal.**
+
+---
+
+## 96. Why the five-minute contract cannot work, in one number
+
+Section 95 found crypto is the most expensive category. The deeper question is
+why the *horizon* matters, and my first attempt at it was dimensionally
+nonsense — I divided a fraction of stake by a fraction of price and produced a
+table claiming a 5-minute contract needs "20x sigma" of edge. Fee is measured in
+probability; sigma in price return. They do not divide.
+
+Done correctly, the fee is **1.40 probability points per trade, at every
+horizon** — `0.056 x p(1-p)` at p = 0.5, and nothing about that depends on how
+long the contract lasts. What changes is the *price precision* that buys 1.40
+points. For an at-the-money digital, `dP/d(log S) = phi(0)/sigma`, so:
+
+```
+ horizon    sigma   fee as pp   price move needed   as x sigma
+  5 min     0.14%      1.40pp        0.49 bps         0.0351
+  1 hour    0.48%      1.40pp        1.69 bps         0.0351
+  1 day     2.36%      1.40pp        8.27 bps         0.0351
+ 30 days   12.90%      1.40pp       45.28 bps         0.0351
+```
+
+The last column is **constant**. In sigma terms the fee costs the same
+everywhere: you must know the underlying 3.5% of a standard deviation better
+than the book does.
+
+### The number that closes it
+
+Put the middle column against section 61's measurement of the irreducible noise
+in the settlement reference — the Binance-versus-Chainlink basis, **sd 5.05 bps,
+unpredictable at 60s, 300s and 3600s alike**:
+
+```
+ horizon   precision needed   settlement noise   ratio
+  5 min        0.49 bps           5.05 bps       0.10
+  1 hour       1.69 bps           5.05 bps       0.33
+  1 day        8.27 bps           5.05 bps       1.64
+ 30 days      45.28 bps           5.05 bps       8.97
+```
+
+**On a 5-minute contract you must resolve the price ten times finer than the
+settlement reference is even defined.** The quantity being predicted is not
+knowable to the precision the fee demands — not because the book is clever, but
+because *the contract's own settlement source disagrees with the exchange by ten
+times the edge you need*.
+
+At a daily horizon the required precision sits comfortably outside the noise. At
+30 days it is nine times outside.
+
+### What this reframes
+
+Every negative result in this project is downstream of this. The book being
+calibrated (§42, §80), the momentum being worth 0.4 bps (§52), the maker losing
+6.2c (§76) — all true, all measured, and all **secondary**. The primary fact is
+that a 5-minute crypto digital at a 7% fee asks for a forecast finer than the
+settlement mechanism's own resolution.
+
+That was computable on day one from two numbers: the fee formula and the basis
+volatility. It took ninety-six sections and a question about rebates to put them
+next to each other.
