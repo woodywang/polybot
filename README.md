@@ -9,6 +9,27 @@ against actual settlements. **No orders are sent.**
 [FINDINGS.md](FINDINGS.md) is the real output: 69 sections, including every
 conclusion that had to be retracted — which is most of the interesting ones.
 
+## Checked against six independent standards
+
+Polymarket's pricing was tested against an external reference on six separate
+instruments. Every one agrees:
+
+| instrument | standard | result |
+|---|---|---|
+| 5-minute crypto book | outcomes, 5,373 quotes | calibrated |
+| hourly crypto book | outcomes, 93k quotes over 527 hours | calibrated |
+| daily BTC strike ladder | subsequent realised volatility | unbiased to ±5 pts |
+| daily BTC strike ladder | internal no-arbitrage (strike + calendar) | zero violations |
+| **Fed decision markets** | **fed funds futures** | **within 1 basis point** |
+| **daily BTC ladder** | **Deribit options** | **inside my own fit error** |
+
+That is not a series of null results. **It is a positive finding about the
+venue**, established from enough directions that it rests on no single
+measurement: Polymarket's crypto and rates markets are efficiently priced
+against the professional markets trading the same risk.
+
+What remains for an outsider is the fee.
+
 ## What it concluded
 
 **No route through this instrument is profitable, and each one is closed for a
