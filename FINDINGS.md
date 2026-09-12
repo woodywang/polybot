@@ -5612,3 +5612,60 @@ The instrument that looked most tractable — observable settlement, deep book, 
 horizon where the fee arithmetic works — turns out to be priced correctly in its
 level, its volatility, and its tails. **There is nothing wrong with it. That is
 the problem.**
+
+---
+
+## 100. The ladder is arbitrage-free, model-free
+
+Every test in sections 97-99 needed a model — a lognormal to fit, a volatility to
+compare, a probability to calibrate. There is one that needs nothing: a strike
+ladder must be **internally consistent**. `P(S > K)` has to fall as `K` rises,
+and for digitals that monotonicity *is* the complete no-arbitrage condition (any
+non-increasing function from 1 to 0 is a valid survival function; convexity,
+which vanillas require, does not apply).
+
+The live ladder, from the CLOB:
+
+```
+   strike     bid     ask
+   70,000   0.999   0.000   (no offers -- nobody sells a near-certainty)
+   72,000   0.995   0.997
+   74,000   0.993   0.994
+   76,000   0.974   0.975
+   78,000   0.080   0.090
+   80,000   0.008   0.009
+   82,000   0.001   0.002
+   84,000   0.001   0.002
+   86,000   0.000   0.001
+   88,000   0.000   0.001
+   90,000   0.000   0.001
+
+monotonicity violations: 0
+```
+
+A violation would mean buying the higher strike at its ask while selling the
+lower at its bid for a **risk-free** profit. There are none, and the bid and ask
+sequences are each individually monotone — the book is consistent strike by
+strike, not merely on average.
+
+Also worth recording: **89% of the implied mass sits between 76k and 78k**, with
+spot at 77,284. The ladder's resolution is 2,000 dollars against a 16-hour sigma
+of roughly 1,300. The instrument cannot express a view finer than its own strike
+spacing, which is most of why section 99's middle buckets were empty.
+
+### What this exhausts
+
+```
+test                                 needs a model?   result
+implied vol vs realised (§98)             yes         unbiased, IV/RV 0.993
+ladder calibration (§99)                  yes         right to 1 point in the tails
+internal arbitrage (§100)                 NO          none
+```
+
+The model-free test is the one that could not be argued with, and it comes back
+clean. **There is no free money in the ladder's own structure, and no systematic
+error in what it implies.**
+
+That is the last question I know how to ask of this instrument without an
+information advantage about Bitcoin itself — which is a different project, and
+not one a harness that reads public order books can help with.
