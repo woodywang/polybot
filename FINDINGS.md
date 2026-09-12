@@ -5895,3 +5895,48 @@ where it does not pass cleanly is my own measurement precision.
 
 **A market you cannot prove wrong at the resolution of your own instruments is a
 market you should not trade against.**
+
+---
+
+## 105. What it would take to resolve the surface
+
+Section 104 ended on "unbiased to within about five points, which is the
+resolution my fit can achieve". That is a statement about ignorance; it becomes
+useful only when it says how much data would remove it.
+
+The day-to-day standard deviation of `IV - RV` is about **9.9 volatility
+points**, so:
+
+```
+  days   std error   resolves a bias of (2 s.e.)
+    18      2.33 p         4.7 points
+    40      1.56 p         3.1 points
+    90      1.04 p         2.1 points
+   180      0.74 p         1.5 points
+   365      0.52 p         1.0 points
+```
+
+**Eighteen days buys ±4.7 points**, which is why sections 98 through 104 could
+not separate a 1.8-point deficit from a 3.3-point premium. A real variance risk
+premium in this asset would be a couple of points; **distinguishing it needs
+roughly 100 days**, and pinning it to a single point needs a year.
+
+That is the honest end state of the daily ladder: not "no edge", but **"no edge
+detectable at ±4.7 points, and here is the sample size that would change the
+answer."** The series produces one event a day, so the measurement exists — it
+simply has not run long enough, and nothing about running the harness harder
+speeds it up.
+
+### The same arithmetic applied backwards
+
+Worth noting what this implies about the whole project. Every live arm today
+accumulated between 1 and 39 settled markets. Against a per-market standard
+deviation of the kind seen throughout, **none of them could have detected an
+edge smaller than the one the fee already removes.** The 222-market arms could;
+they returned -1.35% and +0.43%.
+
+**The instruments that had the power to answer the question were the historical
+ones** — 1,581 hourly markets, 8,627 five-minute windows, 527 hours of book
+quotes — and they answered it consistently. The live arms were never going to
+add resolution; they added the discipline of a reconciled ledger, which turned
+out to be where the real errors were.
