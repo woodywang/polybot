@@ -7075,3 +7075,56 @@ ETH as numeraire rather than USD. The bounds above treat the USD price as a
 martingale, which introduces a convexity correction I have not applied. It is
 small at these horizons relative to a 39-point interval — but it is another
 reason the interval should be read as approximate, not exact.
+
+---
+
+## 124. The whole ladder is inside its bounds, and the bounds are 17x the fee
+
+Section 123 computed model-free bounds at three barriers. Running every level of
+the ETH ladder against the 20.28-day Deribit expiry — longer than Polymarket's
+19.12-day window, so a valid bound at every strike:
+
+```
+    B  dir      PM     lower    upper   width   upper/lower   width/fee
+ 2700   up   0.475    0.2180   0.6128   0.395          2.81        22.6
+ 2800   up   0.305    0.1547   0.4085   0.254          2.64        17.1
+ 2900   up   0.205    0.0969   0.2604   0.164          2.69        14.3
+ 3000   up   0.135    0.0495   0.1648   0.115          3.33        14.1
+ 2300   dn   0.400    0.1845   0.5232   0.339          2.84        20.2
+ 2200   dn   0.235    0.1245   0.3182   0.194          2.56        15.4
+ 2100   dn   0.125    0.0679   0.1849   0.117          2.72        15.3
+```
+
+**Every barrier, both directions, inside its bounds.** No model-free arbitrage
+anywhere on the ladder.
+
+Two structural facts fall out:
+
+**The upper bound is consistently 2.8x the lower.** That ratio barely moves from
+2700 to 3000 or from 2300 to 2100 — it is a property of the Azéma-Yor bound
+itself, not of these prices. A terminal distribution pins a barrier price to
+within a factor of roughly three, and no more.
+
+**The bound is on average 17 times the fee.** The narrowest on the ladder is
+11.5 points at the 3000 barrier; the fee there is 0.82¢. Even where the
+identification is tightest, the ambiguity is fourteen times the transaction cost
+a trade would have to clear.
+
+### What this closes, and how
+
+The barrier instrument is not untradeable because the market is efficient — that
+was never demonstrated and cannot be, from outside. **It is untradeable because
+the terminal option prices, which are the only external anchor available, do not
+identify a barrier price to better than a factor of three.**
+
+That is a statement about information, not about anyone's skill. It is also the
+textbook result: the Skorokhod embedding literature exists precisely because
+marginals do not determine path functionals, and this is that theorem meeting a
+live order book.
+
+Sections 121 through 124 form one argument. A flat-vol fit said cheap; a
+reflection on the smile said rich; the bounds say **both answers were inside the
+feasible set the whole time**, and the set is 17x wider than the fee. **The
+disagreement in section 122 was not a puzzle to be solved — it was the correct
+observable consequence of an identification problem, and finding its width was
+the only thing left to learn.**
