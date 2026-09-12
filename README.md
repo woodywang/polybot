@@ -68,6 +68,53 @@ Glosten-Milgrom falling out of 106k raw quotes. There was never going to be a
 spread wide enough to be free, because what makes a spread wide is exactly what
 makes it necessary.
 
+## The number that explains all of it
+
+The fee is a fixed **1.40 probability points per trade** at any horizon
+(`0.056 x p(1-p)` at the money). What changes with horizon is the price precision
+that buys those points — and the settlement reference has its own irreducible
+noise of **5.05 bps** (the Binance-vs-Chainlink basis, unpredictable at 60s, 300s
+and 3600s alike):
+
+```
+ horizon   precision needed   settlement noise   ratio
+  5 min        0.49 bps           5.05 bps        0.10
+  1 hour       1.69 bps           5.05 bps        0.33
+  1 day        8.27 bps           5.05 bps        1.64
+ 30 days      45.28 bps           5.05 bps        8.97
+```
+
+**A 5-minute contract asks you to resolve the price ten times finer than its own
+settlement source is defined.** Not because the book is clever — because the
+quantity is not knowable to that precision. Everything else in this file is
+downstream of that one line.
+
+Crypto is also the **most expensive category on the platform**: 7% against 3-5%
+elsewhere, with the lowest rebate rate. Net of rebate, 2.80% of stake at the
+money versus 1.12% on the cheapest.
+
+## The instrument that should have worked
+
+`btc-multi-strikes-weekly` — daily events, 11-15 strikes, settling on the
+**Binance 1-minute candle at noon ET** (verified at 0.00% disagreement over 1,581
+markets), 10x the liquidity, and a horizon where the fee arithmetic is sane.
+Seven expiries live at once, so there is a full surface.
+
+It was checked for everything:
+
+| test | needs a model? | result |
+|---|---|---|
+| implied vol vs subsequent realised | yes | unbiased within ~5 points |
+| ladder calibration, tails | yes | right to 1 point |
+| strike monotonicity | **no** | zero violations |
+| calendar (total variance) | **no** | zero violations |
+| forward level | no | within $140 of spot, 7 expiries |
+| term structure | yes | prices mean reversion, 18.5% → 32.8% |
+
+Arbitrage-free in strike, arbitrage-free in time, flat forward, unbiased
+forecast, calibrated tails. **There is no edge here because there is no mistake
+here.**
+
 ## Momentum is real and worthless
 
 Tested with no volatility estimate at all, using the fact that for Brownian
