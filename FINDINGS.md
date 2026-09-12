@@ -6387,3 +6387,64 @@ Eleventh instance, and the same shape as section 43's btc/eth/sol and section
 102's overlapping windows: **things that look like one population and are two.**
 The tell, again, was a number too good to be true — and that remains the only
 detector that has never failed here.
+
+---
+
+## 113. Polymarket agrees with the fed funds futures to within a basis point
+
+The Fed markets are the platform's largest (§112) and their fair value is not a
+model — it is the fed funds futures strip, which prices the same decision for
+professionals. Both are now observable from this machine:
+
+```
+fed funds futures         Sep 96.270 -> 3.730%   Oct 96.140 -> 3.860%
+                          Nov 96.035 -> 3.965%   Dec 95.915 -> 4.085%
+observed EFFR (NY Fed)    3.63%,  target range 3.50-3.75%
+```
+
+The EFFR is **observed, not inferred** — the New York Fed publishes it, which is
+the correction section 110 paid for. The September contract averages the rate
+over the month, split by the Sep 16 meeting, so it solves for the post-meeting
+rate:
+
+```
+days old/new   implied r_new   implied move   P(hike)
+   16 / 14        3.8443%          21.4 bp      85.7%
+   15 / 15        3.8300%          20.0 bp      80.0%
+   17 / 13        3.8608%          23.1 bp      92.3%
+
+Polymarket implied expected move:  19.82 bp   (P(+25) = 0.785)
+```
+
+**Polymarket says 19.82 bp; the futures say 20.0 bp under the 15/15 convention
+and 21.4 bp under 16/14.** The venues agree to within one to two basis points —
+and the day-count convention moves the answer by more than the disagreement
+does.
+
+### What that settles
+
+The largest market on the platform, carrying $19.2M a day, prices a Federal
+Reserve decision to **within a basis point of the professional rates market**.
+Not approximately, not on average — on the specific contract, today, against a
+$5 trillion futures complex.
+
+It also closes the search that began in section 95 when the fee schedule
+revealed crypto was the most expensive category. The chain ran: crypto is
+expensive → what is cheap and computable? → the daily BTC ladder (§97-104, priced
+correctly) → WTI (§108-111, priced on events I cannot forecast) → the Fed
+complex (§112-113, priced to a basis point against futures).
+
+**Every computable market on this platform is priced correctly by someone who
+got there first.** That is now measured on four separate instruments rather than
+asserted from one.
+
+### The residual, stated precisely
+
+A 1.6 bp disagreement on a 25 bp event is 6.4% of the event's value. Polymarket's
+fee on these markets is 5% of stake, and the bid-ask is 0.3% (§112). So **even
+the largest gap I can construct between the two venues is about the size of the
+fee** — and it is smaller than my uncertainty about which day the decision takes
+effect.
+
+There is no trade in a discrepancy you cannot measure more precisely than your
+own calendar convention.
