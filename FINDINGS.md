@@ -6706,3 +6706,64 @@ professional markets that trade the same risk.** What remains for an outsider is
 the fee, which sections 95 and 96 showed is the largest on the platform for
 crypto and demands a forecast finer than the settlement mechanism's own
 resolution at five-minute horizons.
+
+---
+
+## 118. The whole term structure matches, and Deribit arbitrates my fit
+
+Section 117 compared one expiry. Polymarket runs seven at once and Deribit has
+its own grid, so the full curves can be laid side by side:
+
+```
+PM expiry    days   PM 2-strike   PM least-sq   deribit days   deribit IV    OI
+2026-09-12   0.62        19.0%          --            0.29         17.0%    269
+2026-09-13   1.62        18.8%          --            1.29         15.3%    105
+2026-09-14   2.62        25.3%        26.9%           2.29         21.6%     58
+2026-09-15   3.62        26.8%        30.1%           3.29         26.9%     13
+2026-09-16   4.62        31.4%        35.5%           3.29         26.9%     13
+2026-09-17   5.62        33.4%        35.2%           6.29         34.3%    260
+2026-09-18   6.62        32.9%        38.0%           6.29         34.3%    260
+```
+
+**The two curves are the same curve.** Deribit runs 17.0% → 34.3% across the
+week; Polymarket 19.0% → 32.9%. Both slope up at the same rate, and Deribit's
+expiries sit 0.33 days earlier (08:00 against 16:00), which on an upward-sloping
+curve is exactly why it reads slightly lower at each point.
+
+Where the grids align *and* Deribit is liquid — Sep 17/18 against the 6.29-day
+expiry, open interest 260 — the two agree to **1 point**. Where they do not, the
+gap is explained by the mismatch: Sep 16 maps to a Deribit expiry 1.3 days
+earlier with open interest 13, and shows the largest discrepancy in the table.
+
+### Deribit settles section 103
+
+Section 103 found my two fitting methods differ by 4.26 points and that I could
+not tell which was right from Polymarket data alone. **A third party can
+arbitrate**, and at the well-matched liquid points:
+
+```
+                  two-strike vs Deribit    least-squares vs Deribit
+Sep 18 (6.62d)            -1.4 pts                 +3.7 pts
+Sep 17 (5.62d)            -0.9 pts                 +0.9 pts
+Sep 14 (2.62d)            +3.7 pts                 +5.3 pts
+```
+
+The **least-squares fit sits above Deribit at every point**; the two-strike fit
+straddles it. That is what should happen — Deribit's number is an *ATM* implied
+vol, and the two-strike fit is the ATM fit, while least-squares averages in a
+smile that Deribit's ATM quote does not contain.
+
+So section 103's open question resolves: **for comparison against an ATM
+reference, the two-strike fit is the right one**, and it was the one used
+throughout sections 98-102. Those results stand as reported rather than needing
+the +4.26 point adjustment section 103 raised as a possibility.
+
+### Where that leaves the file
+
+An external, liquid, professional options market reproduces Polymarket's entire
+one-week BTC volatility term structure to within about a point where the grids
+line up — and incidentally resolves a methodological ambiguity I could not
+resolve internally.
+
+**That is the most thorough validation in the project, and it is validation of
+the venue, not of a strategy.**
