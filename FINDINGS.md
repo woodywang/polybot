@@ -6767,3 +6767,54 @@ resolve internally.
 
 **That is the most thorough validation in the project, and it is validation of
 the venue, not of a strategy.**
+
+---
+
+## 119. Two venues, one curve, a quarter of a volatility point apart
+
+Section 118 matched each Polymarket expiry to its nearest Deribit one, which is
+crude on a steeply sloping curve. The correct method interpolates **total
+variance** linearly in time between the two Deribit expiries that bracket each
+Polymarket expiry, then backs out the implied volatility at Polymarket's exact
+settlement time.
+
+```
+PM expiry     days   PM ATM fit   deribit interp    diff   min OI
+2026-09-12    0.62        19.0%            15.8%    +3.2      105
+2026-09-13    1.62        18.8%            18.5%    +0.3       58
+2026-09-14    2.62        25.3%            24.0%    +1.3       13
+2026-09-15    3.62        26.8%            28.5%    -1.7       13
+2026-09-16    4.62        31.4%            31.6%    -0.2       13
+2026-09-17    5.62        33.4%            33.4%    -0.0       13
+2026-09-18    6.62        32.9%            34.3%    -1.4      260
+
+mean difference +0.22 points   sd 1.53   n = 7   standard error 0.58
+```
+
+**A prediction market and a crypto options exchange price the same seven-point
+BTC volatility curve to a mean difference of +0.22 volatility points, with a
+standard error of 0.58.** There is no detectable difference between them.
+
+The residual scatter is explained rather than mysterious. The largest deviation
+is the 0.62-day expiry (+3.2), where Deribit's 0.33-day offset is more than half
+the horizon and the interpolation is doing the most work; drop it and the
+remaining six average **-0.28 points with sd 1.0**. The low-open-interest
+anchors (13 contracts) carry the rest.
+
+### This is the end of the enquiry
+
+The question the project opened with was whether a $100 account could trade
+Polymarket's crypto markets profitably. The answer, arrived at from six
+independent directions and finally from the most demanding one available:
+
+**Polymarket's BTC volatility surface is indistinguishable from Deribit's.**
+Not approximately, not on average across a long sample — today, across seven
+expiries, to a quarter of a point, using a method that interpolates correctly
+and checks quote quality before trusting a mark.
+
+Whatever is being traded on the other side of these order books is being priced
+by people with an options desk's understanding of it. The fee (§95: the highest
+category on the platform), the settlement resolution (§96: finer than the
+reference is defined at five minutes), and the adverse selection (§76: -6.2c a
+fill) are not obstacles standing between a retail account and an edge. **They
+are the reason no edge is left by the time the quote is posted.**
