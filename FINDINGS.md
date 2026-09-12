@@ -6082,9 +6082,9 @@ That closes the last open thread from the question that opened it.
 
 ## 108. The cheap category prices jump risk, which is a view I do not have
 
-> **The "$75.0" is spuriously precise — see section 109.** Within the bid-ask
-> alone the implied spot ranges $67.8 to $81.1. The 110-145% implied vol is
-> robust; the level is not.
+> **RETRACTED — see section 110.** WTI is $99.99, not $75. The inference was
+> not merely imprecise; the truth falls outside the error bar section 109
+> computed, and the jump-risk conclusion built on it does not hold.
 
 Section 95 found crypto is the most expensive category and noted the trade-off:
 the cheaper categories have no continuously observable fair value. There is one
@@ -6203,3 +6203,62 @@ The number was right, the method was right, and the **conditioning** was never
 checked. Same shape as section 103 — an instrument with a free choice I did not
 vary — except this time the check followed immediately, in the same breath as
 the claim, rather than three sections later.
+
+---
+
+## 110. I computed an error bar and the truth fell outside it
+
+Section 109 called the WTI level "the only open question a single data feed
+would settle". Yahoo Finance serves `CL=F`. It took one request.
+
+```
+WTI front month:  $99.99   (NYM, 2026-09-11 20:59 UTC)
+52-week range:    $54.98 - $119.48
+last 10 closes:   83.4  85.8  90.2  91.0  91.3  91.5  93.0  96.1  102.5  100.0
+realised vol:     20d 36.9%   60d 49.7%   6mo 66.0%
+```
+
+**$99.99, not $75.** Section 108 inferred the spot from two barrier prices;
+section 109 checked the conditioning and put it at $67.8-$81.1. **The true value
+is outside that band.** I did not merely report a number too precisely — I
+computed an error bar and the answer was not in it.
+
+### What that does to section 108
+
+Everything. The claim was that at a normal 40% oil vol the barriers price at
+"0.000000%", which made them look like pure jump-risk premium. That arithmetic
+used $75, where reaching $130 needs +73%. From $100 it needs +30%:
+
+```
+                P(touch 130)   P(touch 150)
+20d  realised 36.9%    0.14%          0.00%
+60d  realised 49.7%    1.74%          0.02%
+6mo  realised 66.0%    7.33%          0.57%
+market                 4.75%          1.25%
+
+market-implied vol:  59.6% at the 130 barrier, 73.1% at the 150
+```
+
+The market is **not** pricing an absurd tail. It implies 60-73% volatility
+against realised of 37-66%, and at the six-month realised vol of 66% the 130
+barrier would be worth **7.33% against a market price of 4.75%** — the market is
+*cheaper* than recent history, not wildly dearer.
+
+**Section 108's jump-risk conclusion is retracted.** What is left is an ordinary
+skew — the further barrier implies 13 points more volatility than the nearer one
+— which is what any options market shows, and an elevated but not unreasonable
+implied level during a live supply crisis. WTI rallied from $83 to $100 in ten
+sessions; a 60-73% implied vol is a sane response to that.
+
+### The lesson, which is the sharpest of the session
+
+Nine previous corrections were about scope: a number measured correctly and
+described too broadly. **This one is different. I had a quantity I could not
+observe, inferred it from an ill-conditioned system, computed the resulting
+uncertainty honestly, and was still wrong — because the model generating the
+error bar was itself the thing at fault.** A one-touch under driftless GBM cannot
+represent this market, so its residuals are not the error.
+
+**An error bar is only as good as the model that produced it**, and the fix was
+never a better inference. It was one HTTP request to a source I had assumed was
+unavailable after three failures — and did not retry with a different provider.
