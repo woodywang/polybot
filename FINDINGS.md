@@ -6512,3 +6512,67 @@ That makes this the second open question in the file (with section 109's, now
 closed) that is limited by **a specific missing document rather than by method
 or sample size** — and the first one where resolving it would actually change a
 decision.
+
+---
+
+## 115. The convention is resolved. The obstacle is somewhere else and bigger.
+
+Section 114 blamed the Polymarket-versus-futures gap on a one-day calendar
+ambiguity and called it unresolvable from here. It is resolvable, and the answer
+is **observational, not documentary** — the New York Fed publishes daily EFFR
+with the prevailing target range, so the effective date is visible in the data:
+
+```
+2025-09-17 meeting  ->  EFFR 4.33 -> 4.08 on 2025-09-18
+2025-10-29 meeting  ->  EFFR 4.12 -> 3.87 on 2025-10-30
+2025-12-10 meeting  ->  EFFR 3.89 -> 3.64 on 2025-12-11
+```
+
+Three changes, all concluding Wednesday, **EFFR moving the next business day
+every time**, and the move equal to the full 25 bp on all three. So the September
+2026 split is **16/14** — my assumption was right, and the day count explains
+none of the gap.
+
+### The real obstacle
+
+The same data shows where EFFR actually sits inside the target range:
+
+```
+EFFR minus target midpoint, 321 business days
+  full year:      mean -0.71 bp   sd 2.41 bp   range -4.50 to +1.50
+  last 60 days:   mean +0.43 bp   sd 0.25 bp
+```
+
+Recently it is pinned — 0.25 bp of variation, **smaller than the 0.4-0.8 bp gap**.
+That is what made this look promising. But the quantity that matters is not where
+EFFR sits *now*; it is where it will sit **after the range moves**. The three
+observed transitions land at:
+
+```
+after Sep 2025 cut:   -4.5 bp from the new midpoint
+after Oct 2025 cut:   -0.5 bp
+after Dec 2025 cut:   +1.5 bp
+```
+
+**A six basis point spread across three observations.** The gap being measured is
+0.6 bp. The post-change positioning is uncertain by roughly **ten times the
+signal**, and it feeds straight into `r_new`, where 3 bp of error is 12
+probability points.
+
+### Where that leaves it
+
+Better identified and equally closed. Section 114 said the obstacle was a
+calendar convention; it was not. It is that **the fed funds futures price the
+average EFFR, and EFFR's position within a *new* target range has varied by 6 bp
+across the only three transitions available.** Polymarket prices the target
+range itself, which has no such ambiguity.
+
+**The two venues are quoting subtly different objects** — one the realised
+overnight rate, the other the administered range — and the difference between
+those objects is larger than the difference between the venues' opinions.
+
+That is not an inefficiency. It is a basis, and it is the same shape as section
+61's Binance-versus-Chainlink finding: **the reference two markets settle on is
+not the same reference, and the gap between references swamps the gap between
+prices.** Ninety sections apart, on completely different instruments, the same
+thing ends the trade.
