@@ -4498,9 +4498,9 @@ to know than another negative result.
 
 ## 82. The book reacts in 200 milliseconds, and that is the first number in the right range
 
-> **Audited in section 85 — the correction goes the other way.** My Binance
-> path is slow and my Polymarket path is fast, so the true book lag is ~302ms,
-> not 200ms.
+> **Partly replicated — see section 93.** The effect reproduces on ETH at the
+> same magnitude; the *lag* does not. 200ms was one asset's estimate presented
+> as a constant.
 
 `latency.py` cross-correlated Binance mid returns against Polymarket mid returns
 on 100ms bars for 25 minutes of one 5-minute market:
@@ -5156,3 +5156,64 @@ for `reward`, not reading the object.
 about settlement observability, feed rate and spread stands — but it concluded
 hourly was structurally better *for everything*, and for a maker specifically
 that now depends on a rebate it did not know about.
+
+---
+
+## 93. The effect replicated. The number did not.
+
+The ETH run existed to falsify sections 82, 85 and 86. It did half the job.
+
+```
+            peak corr   peak lag   corr at 0ms   bars
+BTC (25m)      0.1897      200ms        0.0218   14,970
+ETH (40m)      0.1882      100ms        0.1166   23,969
+```
+
+**What replicated:** a sub-second peak exists in both assets, at almost
+identical magnitude (0.1897 vs 0.1882), decaying to noise by 300-600ms in both.
+The phenomenon is real and it is not a BTC artifact.
+
+**What did not:** the lag. 200ms on BTC, **100ms on ETH**. And ETH shows
+substantial correlation at zero lag (0.117 against BTC's 0.022), meaning part of
+its book reprices within the same 100ms bar.
+
+### What that costs
+
+Section 85 corrected BTC's 200ms to 302ms using this machine's measured feed
+delays. Applying the same correction to both:
+
+```
+ asset  observed  corrected  p90 travel   budget to act
+   btc     200ms      302ms       2.17c          166ms
+   eth     100ms      202ms       1.78c           66ms
+```
+
+The *value* is stable — 2.17c and 1.78c, both near the account's 1.64c gross —
+because travel scales as sqrt(t) and a 100ms difference in lag barely moves it.
+
+**The budget is not.** It collapses from 166ms to 66ms, because the budget is the
+lag minus my own 137ms of network delay, and that subtraction is brutal. On ETH
+this machine has 66 milliseconds to decide, sign and land an order.
+
+### The honest status of sections 82, 85 and 86
+
+- **§82's mechanism stands.** A sub-second book lag exists, replicated on two
+  assets at the same magnitude.
+- **§82's number does not.** "200ms", and the 302ms built on it, was one asset
+  measured once. The range is 100-200ms observed, ~200-300ms corrected, and it
+  is **asset-specific**.
+- **§82's correspondence with the account is weaker than presented.** It compared
+  a point estimate to 1.64c and landed within 8%. With the range, the value is
+  1.78-2.17c — still the right order of magnitude, which was always the real
+  claim, but no longer a near-match.
+- **§86's conclusion is untouched.** That the lag is the market's aggregate
+  reaction time rather than a gap does not depend on whether it is 200ms or
+  300ms. If anything ETH's faster book supports it: a more actively arbitraged
+  book reprices sooner.
+
+### The pattern this makes five of
+
+Cheap pairs, "ask > 0.5", dwell-time selection, five fills sharing a spread, and
+now one asset's lag read as a constant. **Every one was a correct measurement of
+a narrower thing than I described.** The arithmetic has never been the problem;
+the scope of the claim has, every time.
