@@ -6325,3 +6325,65 @@ about **degrees of freedom**: a test with more knobs than observations will
 always agree with whatever it is testing, and reporting that agreement as
 evidence is the most comfortable mistake in the file — because nothing looks
 wrong, the arithmetic checks out, and the answer is what you expected.
+
+---
+
+## 112. The biggest market on the platform is priced to 30 basis points
+
+Section 111 established the boundary is the *kind* of quantity a question needs,
+not data availability. So: sweeping 200 open markets for underlyings this
+harness can observe:
+
+```
+underlying      mkts    24h volume    fee rates
+rates/fed         10    19,638,793    0.05
+bitcoin/BTC       16       703,335    0.07
+ether/ETH         15       196,134    0.07
+oil/WTI            2        87,860    0.04
+solana             1         9,000    0.07
+```
+
+**The Fed decision markets carry $19.6M a day — twenty-eight times the entire
+BTC complex** — at a 5% fee with a 25% rebate. And unlike a strike ladder they
+form a *complete partition* of one event, which permits the strongest test
+available: the outcomes must sum to 1, with no model at all.
+
+September meeting, five outcomes:
+
+```
+no change                    bid 0.190   ask 0.200
+increase 25 bps              bid 0.780   ask 0.790
+decrease 25 bps              bid 0.003   ask 0.004
+increase 50 bps              bid 0.007   ask 0.008
+decrease 50 bps              bid  --     ask 0.001
+                             ---------------------
+                             sum 0.980   sum 1.003
+```
+
+**Buying every outcome costs 1.0030 and pays exactly 1.00.** A 30 basis point
+overround across a complete five-way partition, with $19.2M of daily volume.
+Selling every outcome collects 0.9800. No arbitrage, and the band is narrower
+than any sportsbook and comparable to a liquid options market.
+
+The implication for a taker is worth stating: **the spread here is 0.3% and the
+fee is 5%.** The market microstructure is nearly free and the platform's own
+charge is sixteen times larger than it. Everything this project found about
+crypto — where the fee is 7% — applies with more force, not less, to the venue's
+most liquid market.
+
+### And a false positive I caught in one step
+
+My first pass summed every Fed market in the sample and got **1.3500 of bids
+against a 1.00 payout — an apparent 35-point arbitrage.** On a $19M/day market
+that is absurd on its face, which is why it was checked rather than written
+down.
+
+The list contained two different `increase-25-bps` markets, at 0.785 and 0.375:
+**September and October meetings.** Summing a partition across two events is not
+a partition. Grouped by event the September set sums correctly and the October
+set shows only one of its five outcomes, which is why it still flags.
+
+Eleventh instance, and the same shape as section 43's btc/eth/sol and section
+102's overlapping windows: **things that look like one population and are two.**
+The tell, again, was a number too good to be true — and that remains the only
+detector that has never failed here.
