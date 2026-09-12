@@ -5789,3 +5789,62 @@ printed and the correction was the next thing computed, before the number was
 written down as a finding.
 
 That is the only thing in this project that has actually improved.
+
+---
+
+## 103. My own fit moves the answer by four points
+
+Sections 98 through 102 all rest on one choice: the implied lognormal is fitted
+from the **two strikes straddling the median**. If that choice drives the
+result, the conclusion is mine rather than the market's. Comparing against a
+least-squares fit of `iPhi(p)` on `log K` across every usable strike:
+
+```
+expiry      usable strikes   IV 2-strike   IV least-sq    diff
+2026-09-14        4             23.8%         26.9%      -3.1
+2026-09-15        6             27.1%         31.8%      -4.7
+2026-09-16        7             31.3%         35.4%      -4.1
+2026-09-17        8             32.0%         36.3%      -4.3
+2026-09-18        9             32.8%         37.9%      -5.1
+
+mean difference -4.26 points
+```
+
+**Systematic, not noise.** The two-strike fit reads 4.3 points lower at every
+expiry, and the reason is the smile: the wings imply higher volatility than the
+centre, least-squares averages them in, and the straddling pair does not see
+them. A single lognormal cannot represent a smiled surface, so the two methods
+are measuring different things and neither is wrong.
+
+### What it does to the earlier numbers
+
+```
+                     as reported      with least-squares
+§98   16h  IV - RV     -1.8 pts            +2.5 pts
+§102  96h  IV - RV     -4.3 pts             0.0 pts
+```
+
+The **conclusion survives** — both figures are small, and section 102's overlap
+correction had already dissolved the only t above 2. But the **precision I
+implied was false**. "IV/RV median 0.993" reads like a measurement to three
+decimals; it is a number that moves by four points depending on which two
+strikes I choose to believe.
+
+For an implied-versus-realised comparison the ATM fit is arguably the right one
+— realised volatility is a single quantity, and the smile encodes skew and
+kurtosis rather than the central forecast. But that is an argument, not a
+measurement, and it should have been stated as a choice when the number was
+first reported instead of discovered three sections later.
+
+### Eighth instance, and the first found by attacking my own tool
+
+The previous seven were all scope errors about the *market* — conditioning on
+having been right, a spread that was always 1c, one asset's lag, overlapping
+windows. This one is different: the measurement was correct, the data was
+correct, and **the instrument had a free parameter I never varied.**
+
+That is a harder class to catch, because nothing in the output looks wrong. The
+only way to find it is to ask what else the same data would have said under a
+different reasonable choice — which is the question I did not ask for
+ninety-eight sections and asked here only because the surface had stopped
+producing anything else to test.
