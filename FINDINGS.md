@@ -6871,8 +6871,8 @@ sign across the ladder.** +2.16, +0.43, -2.53 going up; +3.36, +0.66, -1.41
 going down. A single ATM volatility cannot price a smiled surface, and the
 "edge" is just the difference between Deribit's smile and the flat-vol
 approximation I used to price the barriers. Fitting the smile would remove it —
-and I have no way to fit Deribit's ETH smile at these far strikes without the
-same illiquid-mark problem section 116 caught on BTC.
+and I claimed I had no way to fit Deribit's ETH smile at these strikes. **That
+claim was false; see section 121.**
 
 ### Where this leaves the six-way result
 
@@ -6882,3 +6882,79 @@ smile whose centre matches Deribit's ATM and whose wings behave correctly, on an
 instrument type the BTC test never touched.
 
 The replication section 93 demanded has been done, and it holds.
+
+---
+
+## 121. The excuse was false, and what replaces it is worse
+
+Section 120 declined to fit Deribit's ETH smile, asserting the marks would be
+illiquid as they were for BTC in section 116. **I did not check.** They are not:
+
+```
+deribit ETH, 2026-09-25 (13.29d)
+strike     IV        OI    volume
+  2100   60.2%   38,512       182
+  2200   54.9%   10,796     1,759
+  2300   51.1%    5,825       192
+ [2500   48.0%   23,926]   <- ATM
+  2700   49.9%   11,104       434
+  2800   52.1%   16,708     2,323
+  2900   55.0%   18,128     4,046
+```
+
+A complete, liquid, textbook smile — downside steeper than upside, minimum
+between the 2300 and 2700 strikes, tight two-sided quotes throughout. Exactly
+what section 120 assumed was unavailable.
+
+### And the sharper comparison points the wrong way
+
+Polymarket's barrier-implied flat volatilities against Deribit's European IV at
+the same strikes:
+
+```
+barrier   PM implied   deribit same strike   gap
+2700 up       45.5%                 49.9%   -4.4
+2800 up       47.6%                 52.1%   -4.5
+2900 up       51.0%                 55.0%   -4.0
+2300 dn       44.5%                 51.1%   -6.6
+2200 dn       47.5%                 54.9%   -7.4
+2100 dn       49.8%                 60.2%  -10.4
+```
+
+**Polymarket is below Deribit at every single strike**, by 4 to 10 points, and
+the gap widens with distance. On its face that says the barriers are cheap and
+the trade is to buy them.
+
+### Why I am not going to believe that
+
+Two reasons, and the second is decisive.
+
+**The comparison is not apples to apples.** A one-touch's value depends on
+volatility along the *path* to the barrier, not on the terminal distribution at
+that strike. The relevant Deribit number for a 2700 up-barrier is something
+between the 48.0% ATM and the 49.9% at 2700 — not 49.9% itself. That shrinks
+every gap in the table by roughly half.
+
+**And the remaining direction is exactly the direction a model error would
+produce.** One-touch options under a smile are worth *more* than their flat-vol
+price, because fat tails reach barriers more often. So pricing Polymarket's
+barriers with any flat volatility **understates** what a smile-consistent model
+would say they are worth — which makes Polymarket look cheap **as an artifact of
+my pricing method**, not as a property of the market.
+
+Building the smile-consistent version needs a local-volatility or stochastic-vol
+model calibrated to Deribit's surface. That is a real piece of work and it is not
+something I can do reliably here in a way I would trust against a 4-point
+signal.
+
+### The honest position
+
+**Thirteenth instance, and the clearest statement of the pattern yet:** an
+apparent edge, pointing the same direction across ten observations, whose sign
+is determined by a known deficiency in my own pricing model, in the direction
+that deficiency predicts.
+
+Section 111 named the rule for this — *a test with more knobs than observations
+will always agree with whatever it is testing.* This is the same thing wearing
+a different hat: **a model too crude for the instrument will always find the
+instrument mispriced, in the direction of its own crudeness.**
