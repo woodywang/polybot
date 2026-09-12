@@ -6077,3 +6077,63 @@ rebate — the one genuinely new input since section 57 — moves the 5-minute c
 from -14.04c to -11.87c and changes nothing.
 
 That closes the last open thread from the question that opened it.
+
+---
+
+## 108. The cheap category prices jump risk, which is a view I do not have
+
+Section 95 found crypto is the most expensive category and noted the trade-off:
+the cheaper categories have no continuously observable fair value. There is one
+exception — `finance_prices_fees` at 0.04 with a 0.25 rebate (3.0% net against
+crypto's 5.6%), which is **WTI crude**:
+
+```
+will-wti-reach-150-in-september-2026   bid 0.011  ask 0.014   liq $103,553
+will-wti-reach-130-in-september-2026   bid 0.044  ask 0.051   liq  $79,422
+```
+
+These are **one-touch barriers**: resolve Yes if any 1-minute candle of WTI
+futures prints above the level at any point in September.
+
+No public WTI feed is reachable from here, but two barrier prices are two
+equations. Under driftless GBM, `P(max >= B) = 2 Phi(-ln(B/S) / (sigma sqrt(tau)))`,
+so the pair solves for both unknowns:
+
+```
+P(touch 130) = 0.0475  ->  z = 1.9818
+P(touch 150) = 0.0125  ->  z = 2.4977
+                           implied spot ~ $75.0
+                           implied vol  ~ 125% annualised
+```
+
+**The market's own prices reveal the underlying.** $75 is a plausible WTI level,
+which is a weak but real cross-check on the method.
+
+### What the 125% means
+
+It is not a volatility. At a normal oil volatility of 40%, those barriers price
+at **0.000000%** — a +73% move in 18 days is a seven-sigma diffusion event. The
+market pays 4.75% for it.
+
+That gap is not mispricing, it is **jump risk**. And the platform says so
+plainly: the fee-free markets in section 95 were `strait-of-hormuz-traffic`,
+`will-the-us-invade-iran`, `bab-el-mandeb-strait-effectively-closed`,
+`israel-closes-its-airspace`. **Polymarket is pricing a live Middle East supply
+crisis**, and a closure of Hormuz would move oil 50-100% in a session. A
+lognormal cannot express that, so it reports 125% vol instead.
+
+### Where this ends
+
+To trade these you need a probability for a Hormuz closure. That is a
+geopolitical judgment, not a measurement, and nothing this harness does — read
+order books, consolidate price feeds, fit distributions — produces one.
+
+Section 95 predicted this abstractly: *"the category with the cheapest fees is
+also the one where nothing here could be measured."* This is the concrete form.
+**The fee was never the binding constraint on the cheap categories; the absence
+of a computable fair value was**, and the one cheap category that *looks*
+computable turns out to be priced on an event rather than a diffusion.
+
+That is the boundary of the project, located precisely: **this harness can price
+anything whose uncertainty is diffusion. Everything Polymarket charges little
+for is priced on jumps.**
