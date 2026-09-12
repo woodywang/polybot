@@ -5282,3 +5282,67 @@ asset's lag as a constant — and now a field name read as a payment. The
 difference this time is that it took **four minutes** between writing the claim
 and testing it, instead of fifty sections. The prompt to check came from
 outside; the check itself was three HTTP requests I could have made first.
+
+---
+
+## 95. Crypto is the most expensive category on the platform, and I never checked
+
+Looking at `feeSchedule` for the maker-rebate question turned up something
+bigger that had been sitting in the same field the whole time: **the 7% rate is
+not Polymarket's fee. It is crypto's fee.**
+
+Across the 120 highest-volume open markets:
+
+```
+  rate  rebate  takerOnly   feeType               mkts      24h volume
+  0.05    0.15     True     sports_fees_v3          38       7,221,100
+  0.04    0.25     True     politics_fees           20       5,534,402
+  none    none     --       (feesEnabled: false)    15       2,137,292
+  0.03    0.25     True     sports_fees_v2          10       1,518,888
+  0.05    0.25     True     economics_fees           8      19,669,612
+  0.07    0.20     True     crypto_fees_v2           7         600,767
+  0.04    0.25     True     finance_prices_fees      2         150,708
+```
+
+Net of the rebate rate, as a fraction of stake at the money:
+
+```
+category      rate   rebate   net rate   cost at p=0.5
+crypto        0.07     0.20     0.0560          2.80%
+sports v3     0.05     0.15     0.0425          2.12%
+economics     0.05     0.25     0.0375          1.88%
+politics      0.04     0.25     0.0300          1.50%
+sports v2     0.03     0.25     0.0225          1.12%
+fee-free      0.00       --     0.0000          0.00%
+```
+
+**Crypto costs 2.5x what the cheapest fee-bearing category does**, and 15
+markets — $2.1M of daily volume — charge **nothing at all** (`feesEnabled:
+false`, mostly geopolitical: Hormuz traffic, Iran, Putin).
+
+### What this does and does not mean
+
+It is tempting to read this as "I tested the wrong market". That is half right.
+
+**Right:** every negative result in this project was measured on the most
+heavily taxed category Polymarket offers, and the fee was the binding constraint
+in almost all of them. Taking lost 2.27c a share against a fee of ~1.7c; at the
+politics rate that fee is 0.75c and the same measurement would read very
+differently.
+
+**Wrong:** the fee is only one side. The other sections established the book is
+*calibrated* — conditionally, on four separate features (§80) — and a lower fee
+does not create an edge where none exists. It only lowers the bar an edge has to
+clear.
+
+And crypto was not an arbitrary choice. It is the one category on the platform
+with a **continuously observable fair value**: a Binance price feed makes the
+contract computable, which is what let this project measure calibration at all.
+Politics and geopolitics have no such feed. **The category with the cheapest
+fees is also the one where nothing here could be measured.**
+
+That is a real trade-off rather than a mistake, but it should have been stated
+at the start instead of discovered at section 95. **The fee schedule is the
+first thing to look at on this platform and it varies 2.5x; I looked at it on
+day one only far enough to verify the 7% formula, and never asked whether 7% was
+universal.**
